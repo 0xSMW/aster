@@ -1,354 +1,589 @@
-**Aster language specification v0.1 (engineering draft)**
+# Aster language and compiler production specification (v1.0 engineering spec)
 
-**What you’re building**
-Aster is a statically typed, ahead-of-time compiled, native-code language with Python/Ruby-style surface ergonomics (minimal required annotations, readable syntax, fast iteration) and C++/Rust-class runtime performance on algorithmic kernels. The core strategy is a “static-by-default” language with aggressive type inference, monomorphized generics, explicit control over allocation and aliasing when needed, and a compilation pipeline designed for both fast developer builds and highly optimized release builds.
+This document defines the production-grade requirements for the Aster language, compiler, runtime, standard library, build tool, and benchmark system. The intent is to build a real, competitive compiler and ecosystem, not a prototype. Any implementation decisions must satisfy the constraints here unless amended by a written spec update.
 
-A key implementation precedent is the “high-level SSA IR → lower to LLVM IR” model used by Swift (SIL → LLVM IR). ([Swift.org][1]) Another is using a multi-level IR stack (MLIR-style) to keep high-level structure long enough to optimize loops, arrays, and data layout before lowering to low-level IR. ([Reliable Computer Systems Lab][2]) For fast edit/compile/test cycles, Aster uses a dual-backend plan: a fast codegen backend for dev builds (Cranelift) and an optimizing backend for release builds (LLVM). ([Cranelift][3])
+## Task Tracker (kept current)
 
-**Non-negotiable design constraints**
-The table below is written as “hard constraints” so your team can treat them as acceptance gates during implementation.
+Updated: 2026-01-31
+Legend: [x] done, [ ] todo, [~] in progress
 
-| Area                               | Constraint                                                                                                            | Practical meaning for the team                                                                                                   |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime performance                | Typed hot loops must compile to predictable machine code with no hidden dynamic dispatch and no mandatory GC barriers | You can support dynamic features, but the performance target applies to the statically-typed subset that benchmarks will enforce |
-| Allocation transparency            | Inner-loop allocations must be preventable and auditable                                                              | Provide compiler diagnostics (“alloc report”) and a way to forbid allocation in a function                                       |
-| Separate compilation + incremental | Small edits should avoid whole-program recompile                                                                      | Stable module interfaces, content-addressed caches, and parallel compilation are core requirements                               |
-| Interop                            | First-class C ABI interop from day one                                                                                | The benchmark suite and real adoption both depend on it                                                                          |
-| Benchmark-driven evolution         | Every optimization must be proven on a stable benchmark library                                                       | CI gates require performance regression detection and dashboards                                                                 |
+- [x] Define concrete repo skeleton and create workspace scaffolding (Cargo workspace, crates, CI).
+- [x] Expand IR and type system specs (AST/HIR/MIR schemas, invariants).
+- [x] Add formal grammar appendix (EBNF).
 
-**Surface syntax and core semantics**
-Aster syntax aims to feel like Python: indentation-based blocks, expression-friendly constructs, and minimal punctuation.
+- [ ] Frontend: implement indentation-aware lexer with spans (aster_frontend).
+- [ ] Frontend: implement CST parser with error recovery + precedence.
+- [ ] Frontend: build AST lowering + AST serialization in aster_ast.
+- [ ] Formatter: implement asterfmt over CST with deterministic whitespace rules.
 
-Code examples are illustrative; the precise grammar is specified later.
+- [ ] Name resolution: symbol tables, def IDs, module imports (aster_hir).
+- [ ] HIR lowering: resolve paths + attach DefIds and symbols.
+- [ ] Type checking: constraints + unification + numeric literal typing.
+- [ ] Trait solver: scoped resolution + caching + coherence checks.
 
-```aster
-module math.fast
+- [ ] MIR builder: build CFG + basic blocks + SSA locals.
+- [ ] MIR verifier: structural invariants + dominance checks.
+- [ ] Borrow checker: lifetime inference + borrow graph validation.
+- [ ] Escape analysis: stack promotion + allocation reporting.
 
-def dot(a: slice[f64], b: slice[f64]) -> f64:
-    require a.len == b.len
-    var s = 0.0
-    for i in 0 .. a.len:
-        s += a[i] * b[i]
-    return s
+- [ ] Optimizations: const fold, DCE, CSE, LICM, bounds-check elim.
+- [ ] Inliner: threshold-based with size/compile-time knobs.
+- [ ] Codegen: Cranelift dev backend + LLVM release backend.
+- [ ] Debug info: DWARF emission + stable symbol mangling.
+
+- [ ] Module interface: `.asmod` format + hashing + dep metadata.
+- [ ] Incremental: content-addressed cache + invalidation strategy.
+- [ ] aster CLI: aster.toml, lockfile, dep resolver, build graph.
+
+- [ ] Runtime: panic runtime + stack traces + alloc hooks.
+- [ ] Stdlib core + alloc + io + sync + time + math + test.
+
+- [ ] Bench harness: datasets + C++/Rust baselines + runner.
+- [ ] Dashboards: perf time series + regression detection.
+
+Keep this list updated as work progresses.
+
+## 1) Product goals
+
+Aster is a statically typed, ahead-of-time compiled, native-code language with Python/Ruby-like ergonomics and C++/Rust-class performance on algorithmic kernels.
+
+Primary objectives:
+- Predictable performance: typed hot loops compile to tight machine code with no hidden dynamic dispatch or mandatory GC barriers.
+- Compilation speed: fast incremental builds in dev mode; optimized binaries in release mode.
+- Allocation transparency: inner-loop allocations can be forbidden and audited by the compiler.
+- Interop: first-class C ABI interoperability.
+- Benchmark-driven evolution: every optimization must improve or preserve a benchmark-based objective function.
+
+Non-negotiable acceptance gates (must be measurable):
+- Runtime performance: kernels within 1.05-1.25x of the C++/Rust baseline on the majority of core benchmarks.
+- Noalloc enforcement: @noalloc must be sound and enforced transitively.
+- Incremental rebuilds: small edits in a leaf module should not trigger whole-program rebuilds.
+- Deterministic builds: same inputs produce identical outputs (bit-for-bit) for release builds, modulo toolchain version IDs.
+
+## 2) Repository skeleton and build system (concrete)
+
+### 2.1 Workspace layout (actual directories)
+
+This repo is a Rust workspace and the canonical structure is:
+
+```
+.
+├─ Cargo.toml               # workspace
+├─ rust-toolchain.toml      # pinned toolchain
+├─ crates/
+│  ├─ aster/                # `aster` CLI (build/run/test/bench)
+│  ├─ asterc/               # compiler driver (invoked by aster)
+│  ├─ aster_frontend/       # lexer, parser, CST/AST
+│  ├─ aster_ast/            # AST data model
+│  ├─ aster_hir/            # HIR data model
+│  ├─ aster_mir/            # MIR data model
+│  ├─ aster_typeck/         # type checking + inference
+│  ├─ aster_codegen/        # Cranelift/LLVM backends
+│  ├─ aster_runtime/        # runtime hooks + panic + alloc
+│  ├─ aster_diagnostics/    # diagnostics, spans, reporting
+│  ├─ aster_span/           # FileId, Span, SourceMap
+│  ├─ asterfmt/             # formatter
+│  └─ asterlsp/             # LSP server
+├─ stdlib/                  # stdlib source (Aster)
+├─ tests/                   # compiler + stdlib tests
+├─ tools/                   # bindgen, docgen, perf tools
+├─ perf/                    # self-profile tooling
+├─ aster-bench/             # benchmarks + harness
+└─ .github/workflows/ci.yml
 ```
 
-Core semantic rules (these are “spec rules,” not suggestions):
-Evaluation order is left-to-right for expressions and argument lists.
-Variables are immutable by default; `var` declares mutability.
-Functions are pure by default only in the “effects” sense: no implicit global state; side effects require importing and using effectful APIs. This is primarily for optimization and reasoning, not for policing style.
-Bounds checks are required by default; the compiler must prove-eliminate checks under optimization (loop range reasoning, slice provenance).
-Integer overflow checks are enabled in debug builds and disabled (two’s complement wrap) in release builds unless explicitly requested.
-
-**Lexical structure**
-Indentation defines blocks. Tabs are illegal. Whitespace rules must be deterministic and formatter-enforceable.
-Identifiers are Unicode-normalized to NFC; keywords are ASCII.
-String literals are UTF-8; `str` is a UTF-8 view type with explicit length.
-
-**Types**
-Aster is statically typed, with pervasive local type inference. Public API surfaces (exported functions, module-level constants, struct fields, trait methods) require explicit types to stabilize compilation boundaries and error messages.
-
-Value and reference types:
-`struct` is a value type with predictable layout (C-like by default).
-`enum` is a tagged union with layout rules that allow optimization (niche-filling when possible).
-`class` is a reference type (heap allocation); use is explicit.
-
-Core built-in types:
-`i8 i16 i32 i64 isize`, `u8 u16 u32 u64 usize`, `f32 f64`, `bool`, `char` (Unicode scalar), `str` (borrowed UTF-8 view), `String` (owning), `slice[T]` (borrowed contiguous view), `Array[T]` (owning growable), `span[T, N]` (fixed-size stack value), `ptr[T]` (unsafe raw pointer), `Option[T]`, `Result[T, E]`.
-
-Type inference rules (minimum viable, implementable):
-Local variables infer from initializer.
-Function return type can infer only for non-exported functions; exported functions require explicit return type.
-Generic type parameters infer from arguments (bidirectional inference allowed only within a single function body to keep compile time predictable).
-No global “whole-program” inference.
-
-**Generics and dispatch model**
-Performance target implies static dispatch for generic code by default.
-
-Generics compile strategy:
-Monomorphization is the default for generic functions and structs: each concrete instantiation generates specialized code.
-To control code size and compile time, provide an opt-in “dictionary passing” mode for traits, plus per-function control of specialization.
-
-Required language features:
-Traits (interfaces) with explicit bounds, used for operator overloading and generic constraints.
-Static dispatch when the concrete type is known.
-Dynamic dispatch only when explicitly requested via `dyn Trait` (fat-pointer vtable).
-
-Compile-time cost controls:
-No unconstrained trait search across the entire universe; trait resolution must be module-scoped plus imported traits.
-No compile-time execution model that allows arbitrary user code to run during type-checking (keep compile-time predictable). If you need metaprogramming, make it explicit and cacheable (see “macros” below).
-
-**Memory management and safety model**
-To hit C++/Rust-class performance across algorithmic kernels without GC overhead, Aster uses deterministic destruction and explicit ownership for heap values.
-
-Ownership model (high level):
-Values (`struct`, `enum`, `span`) are copied or moved; move is the default for non-`Copy` types.
-Heap allocations occur only through explicit constructors (`new`, `Box[T]`, `Array[T]`, `String`, etc.) or via compiler-proven escape from a stack-allocation candidate.
-References are either borrowed (`&T`, `&mut T`) or shared (`Shared[T]`), with shared requiring explicit atomic or non-atomic refcount selection depending on thread-safety.
-
-Borrowing rules:
-Within a scope, a value can have either multiple immutable borrows or one mutable borrow; borrows are lexical, with non-lexical lifetime shortening allowed where provable.
-Interior mutability exists only through explicit types (e.g., `Cell[T]`, `Mutex[T]`), never implicitly.
-“Unsafe escape hatches” exist (`unsafe` blocks), but safe code must not allow use-after-free, double free, or data races.
-
-Deterministic destruction:
-`defer` and RAII are part of the language to allow predictable resource management without GC.
-
-Allocation auditing and enforcement:
-The compiler must implement `@noalloc` (function attribute) that becomes a hard error if the function (or anything it inlines/calls) allocates.
-The compiler must implement `@alloc_report` to emit a machine-readable report (JSON) listing allocation sites and reasons (explicit heap, escape, dynamic dispatch, etc.).
-
-**Concurrency**
-Baseline concurrency must match modern expectations without sacrificing performance.
-
-Required model:
-Native threads and atomics.
-`async/await` compiled to state machines (no green-thread runtime requirement).
-Data-race freedom in safe code: only `Send`/`Sync`-like types can cross thread boundaries; shared mutability requires synchronization primitives.
-Message passing channels in stdlib; actor-like structured concurrency can be layered later.
-
-Atomic and memory model:
-Expose C11/C++11-style memory orders (`relaxed`, `acquire`, `release`, `acq_rel`, `seq_cst`) through an `Atomic[T]` API.
-
-**Error handling**
-Aster uses typed errors with zero-cost happy paths.
-
-Primary mechanism:
-`Result[T, E]` with sugar: `try expr` for propagation; `catch` blocks for recovery; `panic` for unrecoverable invariants.
-No exceptions as the primary mechanism in v0.1; if exceptions are added later, they must compile to a form that does not pessimistically inhibit optimization in non-throwing code.
-
-**Modules, packages, and build tool**
-Aster requires a modern “single tool” experience comparable to Rust’s cargo.
-
-Artifacts:
-Source files: `.as` (example).
-Module is a directory with a `module.asmod` interface file generated by compiler.
-Package manifest: `aster.toml` (TOML chosen for human editing and tooling ecosystem).
-
-Build modes:
-`dev`: fast compile, debuggable, minimal optimization, fast backend (Cranelift), incremental on.
-`release`: full optimization, LTO options, LLVM backend.
-`bench`: release-like but with benchmark instrumentation toggles.
-
-Dependency management:
-Semantic versioning with lockfile.
-Offline, hermetic builds supported by fetching dependencies into a local cache with checksums.
-
-Formatter and LSP:
-`aster fmt` must be stable and deterministic from day one.
-Language Server Protocol implementation required early to maintain ergonomics.
-
-**FFI**
-C ABI is first-class:
-`extern "C"` functions with explicit types and calling convention.
-Struct layout attributes: `@repr(C)`, `@packed`, `@align(n)`.
-Header ingestion can be via a separate `aster bindgen` tool that generates Aster declarations from C headers (not required for v0.1, but design should not block it).
-
-**Macros and metaprogramming**
-To avoid C++ template metaprogramming compile-time pathology and Rust procedural macro complexity, Aster uses two explicit mechanisms:
-
-Compile-time functions (CTF):
-Pure, terminating, side-effect-free evaluation on constant inputs (for sizes, offsets, static tables).
-Cache key is the AST of the function plus inputs.
-
-Syntax macros (hygienic):
-Restricted, declarative macros that expand to AST, with no arbitrary filesystem/network access.
-Expansions are cached and included in module interface hashes for correct incremental invalidation.
-
-**Compiler architecture and implementation plan**
-The compiler must be engineered for two competing objectives: fast iteration (compile speed) and peak optimization (runtime speed). The recommended architecture is a multi-tier IR design.
-
-Front-end stages:
-Parsing produces a concrete syntax tree with trivia retained for formatting.
-Lowering produces an AST with explicit block structure and desugared indentation.
-Name resolution produces a HIR (high-level IR) with unique IDs for symbols.
-Type checking + inference on HIR produces a typed HIR.
-Borrow/escape analysis produces a MIR (mid-level IR) suitable for optimization and codegen.
-
-IR strategy:
-Adopt an SSA-based mid-level IR with high-level semantics retained long enough for optimization (loop structure, slices, bounds, ownership). Swift’s SIL is an example of a language-specific SSA IR that retains semantic information, then lowers to LLVM IR for further optimization. ([GitHub][4])
-Optionally implement MIR as a custom MLIR dialect so you can reuse MLIR passes and pattern-rewrite infrastructure; MLIR is explicitly designed to support multiple abstraction levels and extensibility for compiler infrastructure. ([Reliable Computer Systems Lab][2])
-Lowering then targets either LLVM IR (release) or Cranelift IR (dev). LLVM IR is SSA-based and designed to represent high-level languages cleanly while enabling heavy optimization. ([LLVM][5]) Cranelift is positioned as a fast, relatively simple backend meant to be embedded. ([Cranelift][3])
-
-Backends:
-Dev backend: Cranelift for speed; prioritize “good enough” codegen and extremely fast compile/link. Cranelift is used in the Bytecode Alliance ecosystem and designed for embedding. ([GitHub][6])
-Release backend: LLVM for peak optimization (inlining, vectorization, SLP, loop passes, LTO).
-
-Incremental compilation design:
-Each module emits a “module interface” artifact containing exported symbol signatures, trait/impl metadata needed by downstream modules, and a stable “fingerprint” for incremental invalidation.
-Caches are keyed by content hashes of typed HIR plus compilation options.
-Parallel compilation is required across module DAG.
-
-Profiling and diagnostics:
-`asterc -Ztime-passes` equivalent: record time spent per compiler phase and per pass.
-`asterc -Zself-profile` equivalent: emit event trace for flamegraphs.
-`asterc -Zmir-dump`, `-Zir-dump`: for debugging optimization correctness.
-`asterc -Zopt-remarks`: emit optimization remarks, including bounds-check elimination and vectorization.
-
-Compiler performance engineering:
-Follow the same discipline modern compilers document: isolate frontend vs type inference vs codegen time; maintain compile-time benchmarks and regressions as first-class. Swift’s compiler docs include compilation performance as an explicit engineering topic; adopt a similar internal practice. ([GitHub][7])
-
-**Standard library (v0.1 minimum)**
-The v0.1 stdlib is intentionally small but performance-critical.
-
-Required components:
-`core`: primitives, memory, traits, option/result, iterators, slicing, hashing.
-`alloc`: allocation API, Box, String, Array, arena allocators.
-`io`: buffered IO, filesystem, networking (minimal).
-`time`: monotonic clock, timers.
-`sync`: atomics, mutex, rwlock, channels.
-`math`: numeric traits, SIMD hooks (optional in v0.1, but design in).
-`test`: unit test harness.
-`bench`: optional microbenchmark API, but cross-language benchmarks should not depend on it.
-
-The stdlib must be compiled and shipped as prebuilt artifacts per target triple to reduce build times.
-
-**Benchmark library spec (for continuous hill-climbing)**
-You’re building two things: the language/compiler and a benchmark system that continuously measures progress, flags regressions, and provides an objective function for compiler tuning.
-
-Benchmark suite composition should explicitly mix “toy kernels,” “algorithmic kernels,” and “macro-ish” tasks to avoid overfitting.
-
-Benchmark sources you can incorporate (and how):
-LLVM test-suite is a strong template for how to structure benchmarks with reference outputs and tooling to measure runtime, compile time, and code size. ([LLVM][8])
-The Computer Language Benchmarks Game provides a set of small algorithmic programs and a framework for comparative measurement; treat it as one input stream among many, not the whole truth. Use their maintained repository/site as a source of problems and datasets. ([Madnight][9])
-
-Benchmark taxonomy (what you should implement)
-Use this as the canonical set of benchmark categories; each category becomes a directory with a common harness contract.
-
-| Category                  | Examples                                                                                                             | Primary metrics                           |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| Micro (language overhead) | function call, virtual call, loop overhead, bounds-check elimination, iterator fusion, small alloc/free, hash lookup | ns/op, branch-misses, allocs/op           |
-| Kernels (numeric)         | dot product, matmul, FFT, convolution, n-body, spectral norm, mandelbrot                                             | throughput, vectorization %, cache-misses |
-| Data structures           | hashmap insert/lookup, B-tree, sort variants, graph traversal                                                        | ops/s, peak RSS                           |
-| String/bytes              | UTF-8 validation, parsing, regex-lite, base64, JSON tokenization                                                     | MB/s, peak RSS                            |
-| Concurrency               | channel ping-pong, work-stealing queue, actor mailbox                                                                | msgs/s, tail latency                      |
-| Compile-time              | parse/typecheck of large generic-heavy modules, incremental rebuild after small edit                                 | seconds, memory, cache hit rate           |
-| End-to-end (macro)        | JSON parse + transform + serialize, HTTP routing microservice, compression (zstd-like), ray tracer                   | requests/s, p99 latency, binary size      |
-
-Benchmark harness requirements (this is the important part)
-Each benchmark is defined by a machine-readable manifest, plus implementations in Aster, C++, and Rust.
-
-Manifest format: `bench.json` with fields `name`, `category`, `datasets`, `correctness`, `build`, `run`, `metrics`, `tags`, `timeout_s`.
-
-Correctness rules:
-Every benchmark must have either a reference output file or a deterministic output hash.
-Every implementation must validate correctness before timing. If correctness fails, the benchmark is “red” and excluded from performance aggregation.
-
-Measurement rules:
-Use dedicated bare-metal runners for stable results. Containerize toolchains, but not the CPU. Pin CPU frequency and isolate cores.
-For command-level benchmarking (compile and run), use a tool that supports warmups, multiple runs, outlier detection, and JSON export; hyperfine supports these directly and is appropriate for this role. ([GitHub][10])
-For in-process microbenchmarks, C++ baselines can use Google Benchmark and Rust baselines can use Criterion, but your cross-language scoreboard should still be driven by the external harness so all languages run under the same measurement discipline. ([GitHub][11])
-
-Recorded metrics (minimum set stored per (commit, runner, benchmark, dataset, implementation)):
-Runtime: wall time, user CPU time.
-Memory: peak RSS.
-Compile time: frontend time, typecheck time, codegen time, link time.
-Binary size: stripped size and text size.
-Hardware counters: optional but recommended via `perf stat` on Linux (cycles, instructions, branches, branch-misses, cache-misses).
-
-Aggregation and scoring:
-For each benchmark+dataset, define `baseline = min(C++, Rust)` under pinned toolchains and flags.
-Define score as `aster_time / baseline_time` for runtime metrics, and similarly for compile-time and memory if you want multi-objective.
-Define the project “headline score” as geometric mean of runtime ratios across the “core” benchmark set, with a separate reported geometric mean for compile time.
-Regressions are defined as a statistically significant increase in ratio over recent history; Criterion’s philosophy of “statistical confidence for detecting improvements/regressions” is the right standard even if you don’t directly use Criterion for cross-language runs. ([Docs.rs][12])
-
-CI gating policy:
-PR gate runs `smoke` suite only (fast, <10 minutes on a runner).
-Nightly runs `core` suite.
-Weekly runs `full` suite and hardware-counter suite.
-
-Artifacts and dashboards:
-Every run publishes a JSON bundle plus a compact HTML summary.
-A time-series store tracks ratios and highlights regressions per benchmark and per compiler phase.
-The dashboard must allow drilling from “headline score changed” to “which pass/feature caused it,” using compiler self-profile artifacts.
-
-**Hill-climbing and compiler autotuning spec**
-The point of “hill climbing” is to convert benchmark results into a repeatable, automatable optimization loop, without turning your compiler into an overfit benchmark machine.
-
-Knob system (what can be tuned automatically)
-Implement compiler “knobs” as explicit, typed configuration values that can be overridden at build time and recorded into artifacts for reproducibility.
-
-| Knob                                    | Example values          | Expected impact                             |
-| --------------------------------------- | ----------------------- | ------------------------------------------- |
-| Inliner threshold                       | 50..300                 | trade runtime vs compile time and code size |
-| Loop unroll threshold                   | 0..N                    | runtime on kernels, code size               |
-| Vectorization enablement                | on/off, aggressive      | runtime on numeric, compile time            |
-| Bounds-check elimination aggressiveness | conservative/aggressive | runtime on slice-heavy loops                |
-| Monomorphization policy                 | full, capped, mixed     | runtime vs code size vs compile time        |
-| LTO mode                                | off, thin, full         | runtime vs link time                        |
-| Codegen backend in dev                  | cranelift/llvm          | compile time vs runtime in dev              |
-
-Search algorithm
-Start with deterministic coordinate descent hill-climb on one knob at a time over the `smoke` and `core` suites, then confirm improvements on `full`. Store the “winning config” per target triple. Reject any config that improves runtime score but blows compile time score beyond a budget threshold.
-
-Objective function
-Primary objective: minimize geometric mean runtime ratio over `core`.
-Constraints: compile time geometric mean ratio must remain under a fixed budget; binary size ratio under a fixed budget.
-Secondary objective: reduce tail latency for concurrency/macro benchmarks.
-
-Anti-overfitting guardrails
-A change can only land if it improves or does not regress a minimum fraction of benchmark categories. This prevents “win numeric kernels, lose strings and compile-time.”
-
-**Pinned baseline toolchains and flags**
-To keep comparisons meaningful, toolchains and flags must be version-pinned and recorded.
-
-C++ baseline:
-Prefer clang++ with `-O3 -march=native` and an LTO variant for “best effort.”
-Also run g++ in weekly suite if you care about cross-compiler comparison.
-
-Rust baseline:
-Use stable rustc pinned to a specific version; run `--release` plus `-C target-cpu=native` for performance baseline.
-Consider a “fast compile” baseline config if you want to compare dev experience (optional).
-
-Aster:
-Dev mode uses Cranelift for speed; release mode uses LLVM for peak performance. This mirrors the rationale behind treating Cranelift as a fast backend and LLVM as an optimizing backend. ([Cranelift][3])
-
-**Implementation roadmap with exit criteria**
-This is structured to keep your team from building a “pretty syntax” language that later can’t reach performance targets.
-
-| Phase | Deliverable                                                | Exit criteria (must be measured)                                                            |
-| ----- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| P0    | Parser + formatter + module system skeleton                | Stable formatting; deterministic AST; module import graph works                             |
-| P1    | Typed core + codegen for integers/floats + slices + loops  | Numeric kernel suite runs correctly; dot/matmul within 3–10× baseline without optimizations |
-| P2    | MIR + basic optimizations + bounds-check elimination       | Kernel suite within 1.5–2× baseline; bounds checks eliminated where provable                |
-| P3    | Borrow/escape analysis + `@noalloc` + allocation reporting | Inner-loop allocations eliminated in core kernels; `@noalloc` enforced                      |
-| P4    | Generics + traits + monomorphization + inliner             | Data-structure suite within 1.2–1.7× baseline; compile time budget measured and tracked     |
-| P5    | Release backend (LLVM) + ThinLTO + vectorization           | Core suite reaches within 1.05–1.25× baseline on majority of kernels                        |
-| P6    | Concurrency + async + stdlib maturity                      | Concurrency suite competitive; no data races in safe code                                   |
-| P7    | Autotuning + regression gates + dashboards                 | Automated knob tuning produces measurable improvements without regressions                  |
-
-**Concrete repo layout (language + benchmarks)**
-This layout is designed so performance work is never blocked on language syntax work and vice versa.
-
-`aster/` (compiler + tools)
-`asterc/` (compiler)
-`asterfmt/` (formatter)
-`asterlsp/` (language server)
-`stdlib/`
-`tests/` (unit + integration + golden)
-`perf/` (compiler self-profile scripts)
-
-`aster-bench/` (benchmarks)
-`benchmarks/` with subdirs by category
-Each benchmark directory contains `bench.json`, `datasets/`, `ref/`, `impl/aster/`, `impl/cpp/`, `impl/rust/`
-`harness/` (runner + reporters)
-`reports/` (generated artifacts ignored by VCS)
-
-**Why this can reach C++/Rust performance**
-The combination of (a) static typing with inference, (b) monomorphization + static dispatch, (c) explicit ownership/borrowing to avoid GC overhead, and (d) an SSA mid-level IR that retains semantic structure long enough for bounds-check elimination and loop optimization is the established route to “high-level feel, low-level speed.” Swift’s SIL-to-LLVM structure is a concrete example of this architecture. ([GitHub][4]) MLIR-style multi-level lowering is explicitly designed to make this kind of staged optimization practical across abstraction levels. ([Reliable Computer Systems Lab][2]) A “fast backend for dev, optimizing backend for release” split is a direct way to keep iteration speed high while still pursuing peak performance. ([Cranelift][3])
-
-If you want a reference point that explicitly targets “Python-like ergonomics with MLIR-based compilation,” Mojo’s docs describe using MLIR/LLVM-level dialects for lowering; it’s a useful conceptual precedent even if you don’t mirror its design. ([Modular Documentation][13])
-
-[1]: https://swift.org/documentation/swift-compiler/?utm_source=chatgpt.com "Swift Compiler | Swift.org"
-[2]: https://rcs.uwaterloo.ca/~ali/cs842-s23/papers/mlir.pdf?utm_source=chatgpt.com "MLIR: Scaling Compiler Infrastructure for Domain Specific ..."
-[3]: https://cranelift.dev/?utm_source=chatgpt.com "Cranelift"
-[4]: https://github.com/swiftlang/swift/blob/main/docs/SIL/SIL.md?utm_source=chatgpt.com "swift/docs/SIL/SIL.md at main · swiftlang/swift"
-[5]: https://llvm.org/docs/LangRef.html?utm_source=chatgpt.com "LLVM Language Reference Manual"
-[6]: https://github.com/bytecodealliance/wasmtime/blob/main/cranelift/README.md?utm_source=chatgpt.com "wasmtime/cranelift/README.md at main"
-[7]: https://github.com/apple/swift/blob/main/docs/CompilerPerformance.md?utm_source=chatgpt.com "swift/docs/CompilerPerformance.md at main"
-[8]: https://llvm.org/docs/TestSuiteGuide.html?utm_source=chatgpt.com "test-suite Guide — LLVM 23.0.0git documentation"
-[9]: https://madnight.github.io/benchmarksgame/?ref=blog.paulbiggar.com&utm_source=chatgpt.com "The Computer Language Benchmarks Game"
-[10]: https://github.com/sharkdp/hyperfine?utm_source=chatgpt.com "sharkdp/hyperfine: A command-line benchmarking tool"
-[11]: https://github.com/google/benchmark?utm_source=chatgpt.com "google/benchmark: A microbenchmark support library"
-[12]: https://docs.rs/criterion/latest/criterion/?utm_source=chatgpt.com "criterion - Rust"
-[13]: https://docs.modular.com/mojo/faq/?utm_source=chatgpt.com "Mojo FAQ"
-
+This skeleton is already created in the repo and should be filled in place (do not reorganize unless spec changes).
+
+### 2.2 Crate responsibilities
+
+- `aster`: user-facing CLI, invokes `asterc` and manages build graph and caching.
+- `asterc`: compiler driver, orchestrates frontend, passes, and codegen.
+- `aster_frontend`: lexing, parsing, CST building, AST construction.
+- `aster_ast`: AST data types and serialization helpers.
+- `aster_hir`: HIR data types and IDs for resolved symbols.
+- `aster_mir`: MIR data types and SSA invariants.
+- `aster_typeck`: type inference, constraint solving, trait resolution.
+- `aster_codegen`: Cranelift + LLVM integration, target lowering.
+- `aster_runtime`: panic runtime, alloc hooks, stack traces, noalloc enforcement.
+- `aster_diagnostics`: diagnostics engine, error codes, linting.
+- `aster_span`: source map, FileId, Span.
+- `asterfmt`: stable formatter.
+- `asterlsp`: LSP server.
+
+### 2.3 Build system
+
+- Rust workspace with pinned toolchain in `rust-toolchain.toml`.
+- `aster` uses aster.toml manifests and a lockfile for deterministic builds.
+- Build modes:
+  - dev: Cranelift backend, incremental on, debug info on.
+  - release: LLVM backend, full optimizations, optional LTO.
+  - bench: release + instrumentation.
+- External dependencies:
+  - LLVM (preferred via llvm-sys or equivalent)
+  - Cranelift (bytecodealliance crates)
+  - SIMD intrinsics (std or target-specific)
+
+### 2.4 CI and quality gates
+
+The CI configuration (`.github/workflows/ci.yml`) must enforce:
+- `cargo fmt --check`
+- `cargo clippy -- -D warnings`
+- `cargo test --workspace`
+- (Later) benchmark smoke suite
+
+## 3) Language design (surface syntax and semantics)
+
+### 3.1 Lexing and formatting
+- Indentation defines blocks. Tabs are illegal.
+- Indent unit is 4 spaces.
+- Whitespace rules are deterministic and enforced by asterfmt.
+- Comments: `#` to end of line.
+- Identifiers are Unicode-normalized to NFC; keywords are ASCII.
+- Strings are UTF-8; `str` is a borrowed UTF-8 view with explicit length.
+
+### 3.2 Evaluation order
+- Left-to-right for expressions and argument lists.
+- No hidden reordering of side effects.
+
+### 3.3 Types
+- Static typing with local type inference.
+- Explicit types required for public API surfaces: exported functions, module constants, struct fields, trait methods.
+- No whole-program inference.
+
+Built-in types:
+- Integers: i8 i16 i32 i64 isize, u8 u16 u32 u64 usize
+- Floats: f32 f64
+- bool, char (Unicode scalar)
+- str (borrowed UTF-8 view), String (owning)
+- slice[T] (borrowed contiguous view), Array[T] (owning growable)
+- span[T, N] (fixed-size stack value)
+- ptr[T] (unsafe raw pointer)
+- Option[T], Result[T, E]
+
+### 3.4 Structs, enums, classes
+- struct: value type with predictable layout
+- enum: tagged union with niche-filling where possible
+- class: reference type with explicit heap allocation
+- layout control via @repr(C), @packed, @align(n)
+
+### 3.5 Traits and generics
+- Traits (interfaces) with explicit bounds for operator overloading and constraints.
+- Default monomorphization for generics.
+- Optional dictionary-passing mode for code size and compile-time control.
+- Dynamic dispatch only via `dyn Trait` and explicit vtable types.
+
+Trait resolution rules:
+- Scoped resolution (module + imports); no global search.
+- Coherence rules to prevent conflicting impls.
+- Deterministic, cached resolution results keyed by module interface hash.
+
+### 3.6 Ownership and borrowing
+- Value types are moved by default, copied only for Copy types.
+- Borrowing rules: any number of immutable borrows OR one mutable borrow per scope.
+- Non-lexical lifetime shortening allowed where proven.
+- Interior mutability only via explicit types (Cell, Mutex, Atomic).
+- Unsafe blocks exist but must be explicit and auditable.
+
+### 3.7 Effects and purity
+- Functions are effect-pure by default (no implicit global state mutations).
+- Side effects must use explicit effectful APIs or marked effect types.
+- Effect inference allowed within a function body; public signatures must declare effects.
+
+### 3.8 Error handling
+- Result[T, E] with `try` for propagation and `catch` for recovery.
+- `panic` for unrecoverable invariants.
+- No implicit exceptions in v1.0.
+
+### 3.9 Concurrency and async
+- Native threads and atomics in core.
+- async/await compiled to state machines.
+- Data-race freedom in safe code; Send/Sync-like traits required for thread transfer.
+- Memory model consistent with C11/C++11 atomics.
+
+## 4) Compiler architecture (detailed)
+
+### 4.1 Source infrastructure
+
+All IR nodes must carry spans and stable IDs.
+
+```
+FileId: u32
+Span { file: FileId, lo: u32, hi: u32 }
+NodeId: u32                 # local ID within a compilation unit
+DefId { crate_id: u32, idx: u32 }  # globally unique
+SymbolId: u32               # interned string ID
+TypeId: u32                 # interned type ID
+```
+
+Source maps must support:
+- file -> line/column mapping
+- macro expansion tracking
+- deterministic ordering
+
+### 4.2 AST schema (producer: parser)
+
+AST is purely syntactic with minimal desugaring.
+
+```
+Module {
+  name: Path,
+  items: Vec<Item>,
+  span: Span
+}
+
+Item = Function | Struct | Enum | Class | Trait | Impl | Const | Use
+
+Function {
+  name: Ident,
+  params: Vec<Param>,
+  ret: TypeRef,
+  body: Block,
+  attrs: Vec<Attr>,
+  vis: Visibility,
+  span: Span
+}
+
+Param { name: Ident, ty: TypeRef, span: Span }
+
+Block { stmts: Vec<Stmt>, span: Span }
+
+Stmt = Let | Assign | Expr | Return | If | While | ForRange | Break | Continue | Defer | Require
+
+Expr =
+  Lit | Name | Call | Index | Field | Unary | Binary | Cast | IfExpr | BlockExpr |
+  StructLit | ArrayLit | Range | Lambda
+
+TypeRef =
+  Path | Slice(TypeRef) | Array(TypeRef, ConstExpr) | Ptr(TypeRef) | Ref(TypeRef, Mut) |
+  Tuple(Vec<TypeRef>) | Fn(Vec<TypeRef>, TypeRef) | Generic(Path, Vec<TypeRef>)
+```
+
+### 4.3 HIR schema (producer: name resolution)
+
+HIR is name-resolved and assigns DefIds to all items and bindings.
+
+```
+HirModule {
+  crate_id: u32,
+  items: Vec<HirItem>,
+  symbols: SymbolTable
+}
+
+HirItem::Function(HirFunction)
+HirFunction { def_id: DefId, params: Vec<HirParam>, ret: TypeRef, body: HirBody, attrs, vis }
+HirParam { local_id: LocalId, name: SymbolId, ty: TypeRef }
+HirBody { blocks: Vec<HirBlock> }
+
+HirExpr carries resolved paths and DefIds for names.
+```
+
+### 4.4 Type system schema
+
+```
+TypeKind =
+  | Primitive(i8/i16/i32/i64/isize/u8/u16/u32/u64/usize/f32/f64/bool/char)
+  | Str | String
+  | Slice(TypeId)
+  | Array(TypeId, Const)
+  | Span(TypeId, Const)
+  | Ptr(TypeId, Mut)
+  | Ref(TypeId, Mut, Region)
+  | Tuple(Vec<TypeId>)
+  | Struct(DefId, Subst)
+  | Enum(DefId, Subst)
+  | Class(DefId, Subst)
+  | TraitObject(DefId, Subst)   # dyn Trait
+  | Fn(Vec<TypeId>, TypeId, Effects)
+  | Generic(ParamId)
+
+Const = Int(i64) | Bool(bool) | Param(ParamId)
+
+GenericParam = TypeParam | ConstParam | RegionParam
+Subst = Vec<GenericArg>
+GenericArg = Type(TypeId) | Const(Const) | Region(Region)
+
+Region = Static | Param(RegionParamId) | Inferred
+
+Effects = { alloc: bool, io: bool, unsafe: bool, async: bool, ... }
+```
+
+Type inference:
+- Hindley-Milner style with constraints and unification.
+- Trait constraints are solved by a scoped trait solver with caching.
+
+### 4.5 MIR schema (producer: lowering from HIR + typeck)
+
+MIR is SSA-based with explicit control flow graph.
+
+```
+MirBody {
+  blocks: Vec<BasicBlock>
+  locals: Vec<LocalDecl>
+  args: Vec<LocalId>
+  ret_local: LocalId
+}
+
+BasicBlock { stmts: Vec<Statement>, terminator: Terminator }
+
+Statement =
+  | Assign(Place, Rvalue)
+  | StorageLive(LocalId)
+  | StorageDead(LocalId)
+  | Validate(Place, ValidationKind)
+  | Nop
+
+Rvalue =
+  | Use(Operand)
+  | BinaryOp(Op, Operand, Operand)
+  | UnaryOp(Op, Operand)
+  | Cast(Operand, TypeId)
+  | Ref(Place, BorrowKind)
+  | Len(Place)
+  | Index(Place, Operand)
+  | Aggregate(AggregateKind, Vec<Operand>)
+
+Operand = Copy(Place) | Move(Place) | Constant(Const)
+
+Place = Local(LocalId, Projection[])   # Projection: Field, Index, Deref
+
+Terminator =
+  | Return
+  | Goto(BasicBlockId)
+  | SwitchInt { discr: Operand, targets: Vec<(i64, BasicBlockId)>, otherwise: BasicBlockId }
+  | Call { func: Operand, args: Vec<Operand>, dest: Place, target: BasicBlockId, unwind: BasicBlockId? }
+  | Assert { cond: Operand, target: BasicBlockId, msg: AssertMsg }
+  | Unreachable
+```
+
+MIR invariants:
+- SSA: each Local is assigned exactly once unless marked mutable and SSA-lifted.
+- All places are in-bounds unless wrapped by explicit bounds-check instructions.
+- No implicit heap allocation; allocations appear as explicit runtime calls.
+
+### 4.6 Borrow checking and escape analysis
+
+- Borrow checker operates on MIR with lifetimes inferred from HIR scopes.
+- Escape analysis determines stack vs heap allocation.
+- @noalloc attribute is enforced by verifying no allocation paths in call graph.
+
+### 4.7 Module interface (.asmod)
+
+Module interface is a binary format with a JSON debug export. Contents:
+
+```
+Header { magic, version, target_triple, compiler_version, hash }
+Exports {
+  functions: [ { def_id, name, params, ret, abi, effects } ]
+  types: [ { def_id, kind, layout, generics } ]
+  traits: [ { def_id, methods, bounds } ]
+  impls: [ { trait_def_id, type_def_id, where_clauses } ]
+  consts: [ { name, ty, value } ]
+}
+Dependencies { module_name, module_hash }
+```
+
+The `.asmod` hash is used for incremental compilation caching and invalidation.
+
+## 5) Backends
+
+### 5.1 Dev backend (Cranelift)
+- Fast compile, minimal optimization, correct ABI.
+- Used for `aster build` and `aster test` in dev mode.
+
+### 5.2 Release backend (LLVM)
+- Full optimization, LTO options, vectorization enabled.
+- Used for `aster build --release` and `aster bench`.
+
+### 5.3 Cross-platform
+- Target triples supported: macOS (arm64/x86_64), Linux (x86_64/arm64), Windows (x86_64).
+- Cross-compilation via target sysroot and prebuilt stdlib.
+
+## 6) Runtime and standard library
+
+Runtime:
+- Deterministic destruction (RAII and defer).
+- Panic runtime with stack traces and abort option.
+- Allocation hooks for @noalloc and alloc reports.
+
+Stdlib (v1.0 minimum):
+- core, alloc, io, time, sync, math, test
+- prebuilt artifacts per target triple
+- zero-cost abstractions where performance-critical
+
+## 7) Diagnostics and developer experience
+
+Compiler diagnostics must include:
+- precise spans and multi-span notes
+- type mismatch explanations with expected/actual types
+- borrow checker errors with lifetime hints
+- @noalloc violations with call chain
+- alloc report in JSON
+
+Tooling:
+- asterfmt: deterministic formatting
+- asterlsp: goto definition, hover type, semantic tokens, formatting on save
+- aster doc: API docs with type and effect signatures
+
+## 8) Build tool (aster CLI)
+
+Command surface:
+- `aster init`, `aster build`, `aster run`, `aster test`, `aster bench`
+- `aster fmt`, `aster doc`, `aster lsp`
+
+Manifest:
+- `aster.toml` defines package, targets, dependencies, features
+- lockfile required for reproducibility
+
+## 9) Benchmark system (production requirement)
+
+Benchmarks are mandatory and gate optimization changes.
+
+Bench structure:
+- Each benchmark: `bench.json`, `datasets/`, `ref/`, `impl/aster`, `impl/cpp`, `impl/rust`
+
+Core algorithm set (must be implemented in Aster/C++/Rust):
+1) Blocked GEMM
+2) FFT (radix-2 or mixed-radix)
+3) 2D/3D stencil
+4) N-body
+5) SpMV (CSR/ELL)
+6) Dijkstra (binary heap)
+7) Radix sort
+8) Robin Hood hash table
+9) Aho-Corasick
+10) LZ77/LZ4-style compression
+
+Metrics:
+- runtime wall/user
+- peak RSS
+- compile time per phase
+- binary size
+- hardware counters (perf) on Linux
+
+Scoring:
+- Baseline = min(C++, Rust) under pinned toolchains
+- Score = Aster / baseline
+- Headline = geometric mean over core benchmarks
+- Regression gate on statistical significance
+
+## 10) CI and quality gates
+
+CI must include:
+- Lint, format, unit tests
+- Integration tests for compiler + stdlib
+- Smoke benchmark suite (<10 min)
+- Nightly core suite
+- Weekly full suite + perf counters
+
+Quality requirements:
+- Fuzzing of lexer/parser/typechecker
+- IR verifier on every pass
+- Deterministic build verification
+
+## 11) Security and reproducibility
+
+- Hermetic builds with cached dependencies
+- No network access during compilation except explicit package fetch
+- Reproducible releases with pinned toolchains
+
+## 12) Implementation roadmap (production)
+
+Phase 0: Parser + formatter + module system skeleton
+- Exit: stable formatting, deterministic AST, module import graph works
+
+Phase 1: Typed core + numeric loops + slices
+- Exit: kernel suite runs correctly; dot/matmul within 3-10x baseline
+
+Phase 2: MIR + basic optimizations + bounds-check elimination
+- Exit: kernel suite within 1.5-2x baseline
+
+Phase 3: Borrow/escape analysis + @noalloc + alloc report
+- Exit: inner-loop allocations eliminated where provable
+
+Phase 4: Generics + traits + monomorphization + inliner
+- Exit: data-structure suite within 1.2-1.7x baseline
+
+Phase 5: LLVM backend + ThinLTO + vectorization
+- Exit: core suite within 1.05-1.25x baseline
+
+Phase 6: Concurrency + async + stdlib maturity
+- Exit: concurrency suite competitive; safe code race-free
+
+Phase 7: Autotuning + regression gates + dashboards
+- Exit: automated knob tuning yields net improvements
+
+## 13) Definition of done (production)
+
+The compiler is production-ready when:
+- It builds the stdlib and all core benchmarks on all target triples.
+- It passes CI gates and has no known correctness bugs in the core spec.
+- It meets performance gates on the core benchmark suite.
+- It ships with stable formatting, LSP, and package management.
+
+## Appendix A: Formal grammar (EBNF)
+
+Lexical tokens:
+- IDENT, INT, FLOAT, STRING
+- NEWLINE, INDENT, DEDENT
+
+EBNF:
+
+```
+module      = "module" path NEWLINE { item } EOF ;
+path        = IDENT { "." IDENT } ;
+
+item        = function | struct | enum | trait | impl | const | use ;
+
+function    = "def" IDENT "(" params ")" "->" type ":" block ;
+params      = [ param { "," param } ] ;
+param       = IDENT ":" type ;
+
+struct      = "struct" IDENT [ generics ] ":" block ;
+enum        = "enum" IDENT [ generics ] ":" block ;
+trait       = "trait" IDENT [ generics ] ":" block ;
+impl        = "impl" [ generics ] type ":" block ;
+const       = "const" IDENT ":" type "=" expr NEWLINE ;
+use         = "use" path NEWLINE ;
+
+block       = NEWLINE INDENT { stmt } DEDENT ;
+
+stmt        = let_stmt | assign_stmt | if_stmt | while_stmt | for_stmt |
+              return_stmt | break_stmt | continue_stmt | defer_stmt |
+              require_stmt | expr_stmt ;
+
+let_stmt    = [ "var" ] IDENT [ ":" type ] "=" expr NEWLINE ;
+assign_stmt = lvalue assign_op expr NEWLINE ;
+assign_op   = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
+
+if_stmt     = "if" expr ":" block [ "elif" expr ":" block ] [ "else" ":" block ] ;
+while_stmt  = "while" expr ":" block ;
+for_stmt    = "for" IDENT "in" expr ".." expr ":" block ;
+return_stmt = "return" [ expr ] NEWLINE ;
+break_stmt  = "break" NEWLINE ;
+continue_stmt = "continue" NEWLINE ;
+defer_stmt  = "defer" block ;
+require_stmt = "require" expr NEWLINE ;
+expr_stmt   = expr NEWLINE ;
+
+lvalue      = IDENT { ( "." IDENT ) | ( "[" expr "]" ) } ;
+
+expr        = or_expr ;
+or_expr     = and_expr { "or" and_expr } ;
+and_expr    = eq_expr { "and" eq_expr } ;
+eq_expr     = cmp_expr { ("=="|"!=") cmp_expr } ;
+cmp_expr    = add_expr { ("<"|"<="|">"|">=") add_expr } ;
+add_expr    = mul_expr { ("+"|"-") mul_expr } ;
+mul_expr    = unary_expr { ("*"|"/"|"%") unary_expr } ;
+unary_expr  = ("-"|"not") unary_expr | call_expr ;
+
+call_expr   = primary { "(" [ args ] ")" | "[" expr "]" | "." IDENT } ;
+args        = expr { "," expr } ;
+
+primary     = INT | FLOAT | STRING | "true" | "false" | IDENT | "(" expr ")" ;
+
+ type       = path | "slice" "[" type "]" | "span" "[" type "," INT "]" |
+              "ptr" "[" type "]" | "ref" "[" type "]" |
+              "(" type { "," type } ")" ;
+```
+
+End of spec.
