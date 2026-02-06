@@ -1,0 +1,9 @@
+name = "aster-monorepo"
+version = "0.1.0"
+
+# This repo currently acts as a single monorepo package:
+# - shared modules live under `src/` (used by apps/tests)
+# - benchmarks live under `aster/bench/`
+#
+# Future: add package deps + lockfile semantics as `tools/aster/aster` grows.
+
