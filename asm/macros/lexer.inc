@@ -34,6 +34,9 @@
 .equ TOK_LT, 14
 .equ TOK_GT, 15
 .equ TOK_EQEQ, 16
+.equ TOK_NEQ, 17
+.equ TOK_LTE, 18
+.equ TOK_GTE, 19
 .equ TOK_KW_DEF, 20
 .equ TOK_KW_IF, 21
 .equ TOK_KW_ELSE, 22
@@ -42,6 +45,36 @@
 .equ TOK_KW_LET, 25
 .equ TOK_KW_VAR, 26
 .equ TOK_KW_CONST, 27
+.equ TOK_LBRACK, 28
+.equ TOK_RBRACK, 29
+.equ TOK_DOT, 30
+.equ TOK_AMP, 31
+.equ TOK_BAR, 32
+.equ TOK_CARET, 33
+.equ TOK_SHL, 34
+.equ TOK_SHR, 35
+.equ TOK_FLOAT, 36
+.equ TOK_STRING, 37
+.equ TOK_CHAR, 38
+.equ TOK_KW_EXTERN, 40
+.equ TOK_KW_STRUCT, 41
+.equ TOK_KW_RETURNS, 42
+.equ TOK_KW_IS, 43
+.equ TOK_KW_OF, 44
+.equ TOK_KW_NULL, 45
+.equ TOK_KW_AND, 46
+.equ TOK_KW_OR, 47
+.equ TOK_KW_DO, 48
+.equ TOK_KW_THEN, 49
+.equ TOK_KW_CONTINUE, 50
+.equ TOK_KW_BREAK, 51
+.equ TOK_KW_NOT, 52
+.equ TOK_KW_MUT, 53
+.equ TOK_KW_REF, 54
+.equ TOK_KW_PTR, 55
+.equ TOK_KW_SLICE, 56
+.equ TOK_KW_TRUE, 57
+.equ TOK_KW_FALSE, 58
 .equ TOK_UNKNOWN, 255
 
 #endif

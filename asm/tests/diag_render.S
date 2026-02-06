@@ -5,12 +5,15 @@
 #include "abi_x86_64.inc"
 #endif
 #include "span.inc"
+#include "diagnostics.inc"
 #include "vec.inc"
 
+#if defined(__aarch64__)
+
 .equ OFF_SM, 0
-.equ OFF_LINE, 32
-.equ OFF_COL, 40
-.equ FRAME_SIZE, 64
+.equ OFF_DIAGS, 32
+.equ OFF_SPAN, 64
+.equ FRAME_SIZE, 128
 
 .section __TEXT,__const
 .p2align 2
@@ -19,8 +22,9 @@ path_str:
 .p2align 2
 src_str:
     .asciz "a\nbc\n"
-
-#if defined(__aarch64__)
+.p2align 2
+msg_str:
+    .asciz "oops"
 
 FUNC_BEGIN main
     FRAME_ENTER FRAME_SIZE
@@ -40,20 +44,30 @@ FUNC_BEGIN main
     cmp x0, #0
     b.ne .Lfail
 
-    add x0, sp, #OFF_SM
-    mov x1, #0
-    mov x2, #2
-    add x3, sp, #OFF_LINE
-    add x4, sp, #OFF_COL
-    bl _aster_span__sourcemap_line_col
+    add x0, sp, #OFF_DIAGS
+    bl _aster_diag__init
     cbnz x0, .Lfail
 
-    ldr x5, [sp, #OFF_LINE]
-    ldr x6, [sp, #OFF_COL]
-    cmp x5, #2
-    b.ne .Lfail
-    cmp x6, #1
-    b.ne .Lfail
+    add x0, sp, #OFF_SPAN
+    mov x1, #0
+    mov x2, #2
+    mov x3, #3
+    bl _aster_span__span_init
+
+    add x0, sp, #OFF_DIAGS
+    mov x1, #1
+    mov x2, #42
+    add x3, sp, #OFF_SPAN
+    adrp x4, msg_str@PAGE
+    add x4, x4, msg_str@PAGEOFF
+    mov x5, #4
+    bl _aster_diag__push
+    cbnz x0, .Lfail
+
+    add x0, sp, #OFF_DIAGS
+    add x1, sp, #OFF_SM
+    bl _aster_diag__render
+    cbnz x0, .Lfail
 
     mov w0, #0
     b .Ldone
@@ -66,6 +80,22 @@ FUNC_BEGIN main
 FUNC_END main
 
 #elif defined(__x86_64__)
+
+.equ OFF_SM, 0
+.equ OFF_DIAGS, 32
+.equ OFF_SPAN, 64
+.equ FRAME_SIZE, 128
+
+.section __TEXT,__const
+.p2align 2
+path_str:
+    .asciz "test.as"
+.p2align 2
+src_str:
+    .asciz "a\nbc\n"
+.p2align 2
+msg_str:
+    .asciz "oops"
 
 FUNC_BEGIN main
     FRAME_ENTER FRAME_SIZE
@@ -84,20 +114,31 @@ FUNC_BEGIN main
     cmpq $0, %rax
     jne .Lfail_x86
 
-    leaq OFF_SM(%rsp), %rdi
-    movq $0, %rsi
-    movq $2, %rdx
-    leaq OFF_LINE(%rsp), %rcx
-    leaq OFF_COL(%rsp), %r8
-    callq _aster_span__sourcemap_line_col
+    leaq OFF_DIAGS(%rsp), %rdi
+    callq _aster_diag__init
     testq %rax, %rax
     jne .Lfail_x86
 
-    movq OFF_LINE(%rsp), %r9
-    movq OFF_COL(%rsp), %r10
-    cmpq $2, %r9
+    leaq OFF_SPAN(%rsp), %rdi
+    movl $0, %esi
+    movl $2, %edx
+    movl $3, %ecx
+    callq _aster_span__span_init
+
+    leaq OFF_DIAGS(%rsp), %rdi
+    movl $1, %esi
+    movl $42, %edx
+    leaq OFF_SPAN(%rsp), %rcx
+    leaq msg_str(%rip), %r8
+    movq $4, %r9
+    callq _aster_diag__push
+    testq %rax, %rax
     jne .Lfail_x86
-    cmpq $1, %r10
+
+    leaq OFF_DIAGS(%rsp), %rdi
+    leaq OFF_SM(%rsp), %rsi
+    callq _aster_diag__render
+    testq %rax, %rax
     jne .Lfail_x86
 
     movl $0, %eax
@@ -111,5 +152,6 @@ FUNC_BEGIN main
 FUNC_END main
 
 #else
-#error "span_sanity: unsupported architecture"
+#error "diag_render: unsupported architecture"
 #endif
+

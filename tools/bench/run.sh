@@ -6,6 +6,9 @@ OUT_DIR="${BENCH_OUT_DIR:-$ROOT/.context/bench/out}"
 export BENCH_OUT_DIR="$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
+DATA_DIR="$ROOT/.context/bench/data"
+mkdir -p "$DATA_DIR"
+
 BENCH_SET="${BENCH_SET:-all}"
 BENCHES=(dot gemm stencil sort json hashmap regex async_io)
 
@@ -25,35 +28,57 @@ fi
 
 LIST_PATH=""
 TREE_LIST_PATH=""
+FSWALK_META_PATH=""
+TREE_META_PATH=""
 for bench in "${BENCHES[@]}"; do
     if [[ "$bench" == "fswalk" ]]; then
         if [[ -n "${FS_BENCH_LIST:-}" ]]; then
             LIST_PATH="$FS_BENCH_LIST"
         elif [[ -n "${FS_BENCH_LIST_FIXED:-}" ]]; then
-            LIST_PATH="$ROOT/tools/bench/data/fswalk_list.txt"
-            META_PATH="$ROOT/tools/bench/data/fswalk_list.meta"
+            if [[ -z "${FS_BENCH_ROOT:-}" ]]; then
+                echo "FS_BENCH_ROOT is required when FS_BENCH_LIST_FIXED is set" >&2
+                exit 2
+            fi
+            DEPTH="${FS_BENCH_MAX_DEPTH:-6}"
+            MAX_LINES="${FS_BENCH_LIST_MAX_LINES:-}"
+            key="fswalk|$FS_BENCH_ROOT|$DEPTH|$MAX_LINES"
+            id="$(printf '%s' "$key" | shasum -a 256 | awk '{print $1}' | cut -c1-16)"
+            LIST_PATH="$DATA_DIR/fswalk_list_${id}.txt"
+            META_PATH="$DATA_DIR/fswalk_list_${id}.meta"
+            FSWALK_META_PATH="$META_PATH"
             if [[ ! -f "$LIST_PATH" ]]; then
-                mkdir -p "$ROOT/tools/bench/data"
-                "$ROOT/tools/bench/fswalk_list.sh" "$FS_BENCH_ROOT" "$LIST_PATH" "${FS_BENCH_MAX_DEPTH:-6}"
-                {
-                    echo "root=$FS_BENCH_ROOT"
-                    echo "max_depth=${FS_BENCH_MAX_DEPTH:-6}"
-                    echo "generated=$(date +%Y-%m-%d)"
-                } > "$META_PATH"
+                "$ROOT/tools/bench/fswalk_list.sh" "$FS_BENCH_ROOT" "$LIST_PATH" "$DEPTH" "${MAX_LINES:-}"
             fi
-            if [[ -f "$LIST_PATH" && -f "$META_PATH" ]] && ! grep -q '^sha256=' "$META_PATH"; then
-                sha="$(shasum -a 256 "$LIST_PATH" | awk '{print $1}')"
-                bytes="$(wc -c < "$LIST_PATH" | tr -d ' ')"
-                lines="$(wc -l < "$LIST_PATH" | tr -d ' ')"
-                {
-                    echo "sha256=$sha"
-                    echo "bytes=$bytes"
-                    echo "lines=$lines"
-                } >> "$META_PATH"
+            sha="$(shasum -a 256 "$LIST_PATH" | awk '{print $1}')"
+            bytes="$(wc -c < "$LIST_PATH" | tr -d ' ')"
+            lines="$(wc -l < "$LIST_PATH" | tr -d ' ')"
+            generated="$(grep '^generated=' "$META_PATH" 2>/dev/null | head -n 1 | cut -d= -f2- || true)"
+            if [[ -z "$generated" ]]; then
+                generated="$(date +%Y-%m-%d)"
             fi
+            old_sha="$(grep '^sha256=' "$META_PATH" 2>/dev/null | head -n 1 | cut -d= -f2- || true)"
+            if [[ -n "$old_sha" && "$old_sha" != "$sha" ]]; then
+                msg="fixed fswalk list changed: $LIST_PATH (meta sha256=$old_sha, current sha256=$sha)"
+                if [[ -n "${FS_BENCH_STRICT:-}" ]]; then
+                    echo "$msg" >&2
+                    exit 2
+                fi
+                echo "warning: $msg" >&2
+            fi
+            {
+                echo "root=$FS_BENCH_ROOT"
+                echo "max_depth=$DEPTH"
+                if [[ -n "$MAX_LINES" ]]; then
+                    echo "max_lines=$MAX_LINES"
+                fi
+                echo "generated=$generated"
+                echo "sha256=$sha"
+                echo "bytes=$bytes"
+                echo "lines=$lines"
+            } > "$META_PATH"
         else
             LIST_PATH="$OUT_DIR/fswalk_list.txt"
-            "$ROOT/tools/bench/fswalk_list.sh" "$FS_BENCH_ROOT" "$LIST_PATH" "${FS_BENCH_MAX_DEPTH:-6}"
+            "$ROOT/tools/bench/fswalk_list.sh" "$FS_BENCH_ROOT" "$LIST_PATH" "${FS_BENCH_MAX_DEPTH:-6}" "${FS_BENCH_LIST_MAX_LINES:-}"
         fi
         export FS_BENCH_LIST_PATH="$LIST_PATH"
         break
@@ -65,27 +90,47 @@ for bench in "${BENCHES[@]}"; do
         if [[ -n "${FS_BENCH_TREEWALK_LIST:-}" ]]; then
             TREE_LIST_PATH="$FS_BENCH_TREEWALK_LIST"
         elif [[ -n "${FS_BENCH_TREEWALK_LIST_FIXED:-}" ]]; then
-            TREE_LIST_PATH="$ROOT/tools/bench/data/treewalk_dirs.txt"
-            META_PATH="$ROOT/tools/bench/data/treewalk_dirs.meta"
+            if [[ -z "${FS_BENCH_ROOT:-}" ]]; then
+                echo "FS_BENCH_ROOT is required when FS_BENCH_TREEWALK_LIST_FIXED is set" >&2
+                exit 2
+            fi
+            DEPTH="${FS_BENCH_MAX_DEPTH:-6}"
+            MAX_LINES="${FS_BENCH_TREEWALK_LIST_MAX_LINES:-}"
+            key="treewalk|$FS_BENCH_ROOT|$DEPTH|$MAX_LINES"
+            id="$(printf '%s' "$key" | shasum -a 256 | awk '{print $1}' | cut -c1-16)"
+            TREE_LIST_PATH="$DATA_DIR/treewalk_dirs_${id}.txt"
+            META_PATH="$DATA_DIR/treewalk_dirs_${id}.meta"
+            TREE_META_PATH="$META_PATH"
             if [[ ! -f "$TREE_LIST_PATH" ]]; then
-                mkdir -p "$ROOT/tools/bench/data"
-                "$ROOT/tools/bench/treewalk_list.sh" "$FS_BENCH_ROOT" "$TREE_LIST_PATH" "${FS_BENCH_MAX_DEPTH:-6}"
-                {
-                    echo "root=$FS_BENCH_ROOT"
-                    echo "max_depth=${FS_BENCH_MAX_DEPTH:-6}"
-                    echo "generated=$(date +%Y-%m-%d)"
-                } > "$META_PATH"
+                "$ROOT/tools/bench/treewalk_list.sh" "$FS_BENCH_ROOT" "$TREE_LIST_PATH" "$DEPTH" "${MAX_LINES:-}"
             fi
-            if [[ -f "$TREE_LIST_PATH" && -f "$META_PATH" ]] && ! grep -q '^sha256=' "$META_PATH"; then
-                sha="$(shasum -a 256 "$TREE_LIST_PATH" | awk '{print $1}')"
-                bytes="$(wc -c < "$TREE_LIST_PATH" | tr -d ' ')"
-                lines="$(wc -l < "$TREE_LIST_PATH" | tr -d ' ')"
-                {
-                    echo "sha256=$sha"
-                    echo "bytes=$bytes"
-                    echo "lines=$lines"
-                } >> "$META_PATH"
+            sha="$(shasum -a 256 "$TREE_LIST_PATH" | awk '{print $1}')"
+            bytes="$(wc -c < "$TREE_LIST_PATH" | tr -d ' ')"
+            lines="$(wc -l < "$TREE_LIST_PATH" | tr -d ' ')"
+            generated="$(grep '^generated=' "$META_PATH" 2>/dev/null | head -n 1 | cut -d= -f2- || true)"
+            if [[ -z "$generated" ]]; then
+                generated="$(date +%Y-%m-%d)"
             fi
+            old_sha="$(grep '^sha256=' "$META_PATH" 2>/dev/null | head -n 1 | cut -d= -f2- || true)"
+            if [[ -n "$old_sha" && "$old_sha" != "$sha" ]]; then
+                msg="fixed treewalk dirs list changed: $TREE_LIST_PATH (meta sha256=$old_sha, current sha256=$sha)"
+                if [[ -n "${FS_BENCH_STRICT:-}" ]]; then
+                    echo "$msg" >&2
+                    exit 2
+                fi
+                echo "warning: $msg" >&2
+            fi
+            {
+                echo "root=$FS_BENCH_ROOT"
+                echo "max_depth=$DEPTH"
+                if [[ -n "$MAX_LINES" ]]; then
+                    echo "max_lines=$MAX_LINES"
+                fi
+                echo "generated=$generated"
+                echo "sha256=$sha"
+                echo "bytes=$bytes"
+                echo "lines=$lines"
+            } > "$META_PATH"
         fi
         if [[ -n "$TREE_LIST_PATH" ]]; then
             export FS_BENCH_TREEWALK_LIST_PATH="$TREE_LIST_PATH"
@@ -93,6 +138,27 @@ for bench in "${BENCHES[@]}"; do
         break
     fi
 done
+
+if [[ -n "${FS_BENCH_ROOT:-}" ]]; then
+    if [[ -n "${BENCH_NOTE:-}" ]]; then
+        echo "Note: $BENCH_NOTE"
+    fi
+    echo "FS dataset:"
+    echo "- FS_BENCH_ROOT: $FS_BENCH_ROOT"
+    echo "- FS_BENCH_MAX_DEPTH: ${FS_BENCH_MAX_DEPTH:-6}"
+    _meta_get() {
+        local key="$1"
+        local path="$2"
+        grep "^${key}=" "$path" 2>/dev/null | head -n 1 | cut -d= -f2- || true
+    }
+    if [[ -n "$FSWALK_META_PATH" && -f "$FSWALK_META_PATH" ]]; then
+        echo "- fswalk_list: sha256=$(_meta_get sha256 "$FSWALK_META_PATH"), bytes=$(_meta_get bytes "$FSWALK_META_PATH"), lines=$(_meta_get lines "$FSWALK_META_PATH")"
+    fi
+    if [[ -n "$TREE_META_PATH" && -f "$TREE_META_PATH" ]]; then
+        echo "- treewalk_dirs: sha256=$(_meta_get sha256 "$TREE_META_PATH"), bytes=$(_meta_get bytes "$TREE_META_PATH"), lines=$(_meta_get lines "$TREE_META_PATH")"
+    fi
+    echo ""
+fi
 
 fs_built=0
 for bench in "${BENCHES[@]}"; do

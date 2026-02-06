@@ -22,6 +22,7 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [x] Purge shim-based benchmark "compilers" and template backends from the repo (policy enforcement).
 - [x] Deprecate `NEXT.md` and keep all handoff/status info in `INIT.md`.
 - [x] Clone tinygrad reference repo into `libraries/tinygrad` for Aster ML port planning (2026-02-06).
+- [x] Add single authoritative green gate script at `tools/ci/gates.sh`.
 
 ### 1) Low-Level Runtime + Test Infrastructure (asm)
 - [x] Define assembly macro conventions, ABI, and object format targets.
@@ -55,18 +56,19 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [x] Benchmark harness: C++/Rust baselines + suite scoring (median, win-rate, geomean).
 - [x] Tune/optimize benchmark sources (kernel-level Aster code).
 
-### 3) Compiler MVP: `asterc` (assembly; bench-complete subset)
-- [ ] Aster1(MVP): define the bench-complete language subset (syntax + semantics + ABI) with examples + tests.
-- [ ] `asm/driver/asterc.S`: compiler CLI (compile `.as` -> `.S`/exe), deterministic output, and errors.
-- [~] Frontend: finish `aster_span` core types (FileId, Span, SourceMap).
-- [~] Frontend: finish `aster_diagnostics` (spans, reports) and render to stderr.
-- [~] Frontend: lexer (indentation, spans, tokens) including string/char literals and comments.
-- [~] Frontend: parser (module items + statements/exprs needed by benchmarks).
-- [ ] Type system (MVP): explicit types only; validate calls/returns; C-ABI externs.
-- [ ] Codegen (MVP, host arch first): direct AST->assembly for the bench subset (no HIR/MIR required for correctness).
-- [ ] Link: invoke system assembler/linker (clang/ld) from `asterc` to produce an executable.
-- [ ] E2E smoke: compile+run every benchmark with small inputs (fast), as a gating test.
-- [ ] Integration: `tools/bench/run.sh` must build Aster binaries only via `tools/build/out/asterc` (no shims).
+### 3) Compiler MVP: `asterc` (real; bench-complete subset)
+- [x] Aster1(MVP): define the bench-complete language subset (syntax + semantics + ABI) with examples + tests.
+      Include "lookahead" requirements for tinygrad-as-Aster (SIMD-friendly numerics, explicit memory layout, kernels, and a path to generics/traits without breaking the MVP).
+- [x] `asm/driver/asterc.S`: compiler CLI (compile `.as` -> `.ll` -> exe), deterministic output, and errors.
+- [x] Frontend: finish `aster_span` core types (FileId, Span, SourceMap).
+- [x] Frontend: finish `aster_diagnostics` (spans, reports) and render to stderr.
+- [x] Frontend: lexer (indentation, spans, tokens) including string/char literals and comments.
+- [x] Frontend: parser (module items + statements/exprs needed by benchmarks).
+- [x] Type system (MVP): explicit types only; validate calls/returns; C-ABI externs.
+- [x] Codegen (MVP, host arch first): AST->LLVM IR for the bench subset (no HIR/MIR required for correctness).
+- [x] Link: invoke system compiler/linker (clang/ld) from `asterc` to produce an executable.
+- [x] E2E smoke: compile+run every benchmark with small inputs (fast), as a gating test.
+- [x] Integration: `tools/bench/run.sh` must build Aster binaries only via `tools/build/out/asterc` (no shims).
 
 ### 4) Compiler IR + Language Semantics (post-MVP)
 - [ ] Implement aster_ast data model + serialization helpers in assembly.
@@ -81,6 +83,10 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [ ] Build system: native module graph + deterministic incremental compilation in `asterc` (no Python).
 - [ ] Implement runtime (panic, alloc hooks, stack traces) and core stdlib.
 - [ ] Implement stdlib fs traversal APIs (fts/opendir) to replace direct libc calls in benches.
+- [ ] Implement stdlib networking (`net`, `http`) for remote API clients:
+      TCP + DNS + TLS + HTTP client with streaming responses (SSE-style) on macOS first.
+      Target: Aster can consume OpenAI-style streaming APIs natively (no shelling out).
+      Compatibility target: `https://platform.openai.com/docs/llms.txt` (streaming, tool-calls, JSON).
 - [ ] Implement aster CLI (build, run, test, bench) and minimal package graph.
 - [ ] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
 - [ ] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
@@ -92,10 +98,13 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [ ] Build test runner + golden output harness for stdlib and compiler tests.
 - [ ] Add module/package registry layout and lockfile semantics.
 - [ ] Add release engineering (versioning, packages, installer, docs site).
+- [ ] Docs + sample apps (continuous):
+      maintain `docs/learn/` tutorials and `aster/apps/` sample apps as features land
+      (FFI, fs tools, perf kernels, and at least one streaming HTTP client example, e.g. OpenAI chat stream).
 
 ### 5) Performance Hill-Climb (after real compiler produces the binaries)
 - [ ] Add build-time measurement (clean + incremental) to `tools/bench/run.sh` and record in `BENCH.md`.
-- [ ] Start a new `BENCH.md` epoch for real-`asterc` results (legacy shim-era runs are non-authoritative).
+- [x] Start a new `BENCH.md` epoch for real-`asterc` results (legacy shim-era runs are non-authoritative).
 - [ ] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
 - [~] Implement deterministic build cache + incremental recompilation DAG.
 
@@ -245,6 +254,8 @@ Near-term priorities (roadmap slice):
    (no shims), with fast e2e smoke tests for each bench.
 3) Re-baseline and restart hill-climbing in `BENCH.md` only after the real compiler is
    producing the benchmark binaries.
+4) As milestones land, write learning docs and sample apps so the language is teachable and
+   the stdlib surface (including networking/streaming) stays grounded in real usage.
 
 ## 1) Product goals
 

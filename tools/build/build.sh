@@ -13,7 +13,7 @@ BIN="$OUT_DIR/$BASE_NAME"
 
 shopt -s nullglob
 RUNTIME_SRC=("$ROOT/asm/runtime/"*.S)
-COMPILER_SRC=("$ROOT/asm/compiler/"*.S)
+COMPILER_SRC=("$ROOT/asm/compiler/"*.S "$ROOT/asm/compiler/"*.c)
 
 OBJ_FILES=()
 for file in "${RUNTIME_SRC[@]}" "${COMPILER_SRC[@]}" "$SRC"; do
