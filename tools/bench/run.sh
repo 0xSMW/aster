@@ -9,6 +9,32 @@ mkdir -p "$OUT_DIR"
 DATA_DIR="$ROOT/.context/bench/data"
 mkdir -p "$DATA_DIR"
 
+now_ns() {
+    python3 - <<'PY'
+import time
+print(time.time_ns())
+PY
+}
+
+needs_build() {
+    local out="$1"
+    local src="$2"
+    local dep="${3:-}"
+    if [[ -n "${BENCH_REBUILD:-}" ]]; then
+        return 0
+    fi
+    if [[ ! -f "$out" ]]; then
+        return 0
+    fi
+    if [[ "$src" -nt "$out" ]]; then
+        return 0
+    fi
+    if [[ -n "$dep" && -f "$dep" && "$dep" -nt "$out" ]]; then
+        return 0
+    fi
+    return 1
+}
+
 BENCH_SET="${BENCH_SET:-all}"
 BENCHES=(dot gemm stencil sort json hashmap regex async_io)
 
@@ -160,30 +186,111 @@ if [[ -n "${FS_BENCH_ROOT:-}" ]]; then
     echo ""
 fi
 
-fs_built=0
-for bench in "${BENCHES[@]}"; do
-    if [[ "$bench" == "fswalk" || "$bench" == "treewalk" || "$bench" == "dircount" || "$bench" == "fsinventory" ]]; then
-        # All fs benches share the same source and dispatch by env vars.
-        # Compile once per language, then copy to the other names.
-        if [[ "$fs_built" -eq 0 ]]; then
-            "$ROOT/tools/build/asterc.sh" "$ROOT/aster/bench/fswalk/fswalk.as" "$OUT_DIR/aster_fswalk"
-            clang++ "$ROOT/aster/bench/fswalk/cpp.cpp" -O3 -std=c++17 -o "$OUT_DIR/cpp_fswalk"
-            rustc -O "$ROOT/aster/bench/fswalk/rust.rs" -o "$OUT_DIR/rust_fswalk"
-            fs_built=1
-        fi
-        if [[ "$bench" != "fswalk" ]]; then
-            cp -f "$OUT_DIR/aster_fswalk" "$OUT_DIR/aster_${bench}"
-            cp -f "$OUT_DIR/cpp_fswalk" "$OUT_DIR/cpp_${bench}"
-            cp -f "$OUT_DIR/rust_fswalk" "$OUT_DIR/rust_${bench}"
-        fi
-        continue
-    fi
+build_all() {
+    local timing="${1:-0}" # 1 = measure
+    local dep_asterc="$ROOT/tools/build/out/asterc"
 
-    # Kernel benches compile each benchmark's source independently.
-    "$ROOT/tools/build/asterc.sh" "$ROOT/aster/bench/${bench}/${bench}.as" "$OUT_DIR/aster_${bench}"
-    clang++ "$ROOT/aster/bench/${bench}/cpp.cpp" -O3 -o "$OUT_DIR/cpp_${bench}"
-    rustc -O "$ROOT/aster/bench/${bench}/rust.rs" -o "$OUT_DIR/rust_${bench}"
-done
+    local total_ns_aster=0
+    local total_ns_cpp=0
+    local total_ns_rust=0
+
+    local fs_built=0
+    for bench in "${BENCHES[@]}"; do
+        if [[ "$bench" == "fswalk" || "$bench" == "treewalk" || "$bench" == "dircount" || "$bench" == "fsinventory" ]]; then
+            # All fs benches share the same source and dispatch by env vars.
+            # Compile once per language, then copy to the other names.
+            local aster_src="$ROOT/aster/bench/fswalk/fswalk.as"
+            local cpp_src="$ROOT/aster/bench/fswalk/cpp.cpp"
+            local rust_src="$ROOT/aster/bench/fswalk/rust.rs"
+
+            if [[ "$fs_built" -eq 0 ]]; then
+                if needs_build "$OUT_DIR/aster_fswalk" "$aster_src" "$dep_asterc"; then
+                    local t0=0 t1=0
+                    if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
+                    "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_fswalk"
+                    if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_aster=$(( total_ns_aster + (t1 - t0) )); fi
+                fi
+                if needs_build "$OUT_DIR/cpp_fswalk" "$cpp_src"; then
+                    local t0=0 t1=0
+                    if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
+                    clang++ "$cpp_src" -O3 -std=c++17 -o "$OUT_DIR/cpp_fswalk"
+                    if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_cpp=$(( total_ns_cpp + (t1 - t0) )); fi
+                fi
+                if needs_build "$OUT_DIR/rust_fswalk" "$rust_src"; then
+                    local t0=0 t1=0
+                    if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
+                    rustc -O "$rust_src" -o "$OUT_DIR/rust_fswalk"
+                    if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_rust=$(( total_ns_rust + (t1 - t0) )); fi
+                fi
+                fs_built=1
+            fi
+
+            if [[ "$bench" != "fswalk" ]]; then
+                if needs_build "$OUT_DIR/aster_${bench}" "$OUT_DIR/aster_fswalk"; then
+                    cp -f "$OUT_DIR/aster_fswalk" "$OUT_DIR/aster_${bench}"
+                fi
+                if needs_build "$OUT_DIR/cpp_${bench}" "$OUT_DIR/cpp_fswalk"; then
+                    cp -f "$OUT_DIR/cpp_fswalk" "$OUT_DIR/cpp_${bench}"
+                fi
+                if needs_build "$OUT_DIR/rust_${bench}" "$OUT_DIR/rust_fswalk"; then
+                    cp -f "$OUT_DIR/rust_fswalk" "$OUT_DIR/rust_${bench}"
+                fi
+            fi
+            continue
+        fi
+
+        # Kernel benches compile each benchmark's source independently.
+        local aster_src="$ROOT/aster/bench/${bench}/${bench}.as"
+        local cpp_src="$ROOT/aster/bench/${bench}/cpp.cpp"
+        local rust_src="$ROOT/aster/bench/${bench}/rust.rs"
+
+        if needs_build "$OUT_DIR/aster_${bench}" "$aster_src" "$dep_asterc"; then
+            local t0=0 t1=0
+            if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
+            "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+            if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_aster=$(( total_ns_aster + (t1 - t0) )); fi
+        fi
+        if needs_build "$OUT_DIR/cpp_${bench}" "$cpp_src"; then
+            local t0=0 t1=0
+            if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
+            clang++ "$cpp_src" -O3 -o "$OUT_DIR/cpp_${bench}"
+            if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_cpp=$(( total_ns_cpp + (t1 - t0) )); fi
+        fi
+        if needs_build "$OUT_DIR/rust_${bench}" "$rust_src"; then
+            local t0=0 t1=0
+            if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
+            rustc -O "$rust_src" -o "$OUT_DIR/rust_${bench}"
+            if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_rust=$(( total_ns_rust + (t1 - t0) )); fi
+        fi
+    done
+
+    if [[ "$timing" -eq 1 ]]; then
+        # ns -> seconds with 3 decimals (avoid bc dependency)
+        NS_ASTER="$total_ns_aster" NS_CPP="$total_ns_cpp" NS_RUST="$total_ns_rust" python3 - <<'PY'
+import os
+def fmt(ns: int) -> str:
+    return f"{ns/1e9:.3f}s"
+print("Build time (this build stage):")
+print(f"- aster: {fmt(int(os.environ['NS_ASTER']))}")
+print(f"- cpp:   {fmt(int(os.environ['NS_CPP']))}")
+print(f"- rust:  {fmt(int(os.environ['NS_RUST']))}")
+PY
+        echo ""
+    fi
+}
+
+if [[ -n "${BENCH_BUILD_TIMING:-}" ]]; then
+    # Clean build timing: wipe just the benchmark binaries/IR in OUT_DIR.
+    rm -f "$OUT_DIR"/aster_* "$OUT_DIR"/cpp_* "$OUT_DIR"/rust_* 2>/dev/null || true
+    rm -f "$OUT_DIR"/*.ll 2>/dev/null || true
+    echo "Build timing: clean"
+    build_all 1
+
+    echo "Build timing: incremental (no-op)"
+    build_all 1
+else
+    build_all 0
+fi
 
 python3 - <<'PY'
 import os

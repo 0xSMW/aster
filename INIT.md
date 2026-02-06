@@ -108,7 +108,18 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [ ] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
 - [~] Implement deterministic build cache + incremental recompilation DAG.
 
-### 6) ML (post-production)
+### 6) Performance Domination (>=20% Faster on Every Benchmark)
+- [ ] Define the target: for every benchmark in the suite, Aster median runtime must be `<= 0.80x` the best baseline (min of C++ and Rust) on the same host/toolchains/datasets.
+- [ ] Extend suite scoring to report `win>=20%` counts per benchmark and require 100% for this milestone.
+- [ ] Bench harness: add compile-time measurement and reporting for Aster/C++/Rust (clean + incremental), recorded alongside runtime results in `BENCH.md`.
+      Clean: fresh build from scratch; Incremental: minimal edit + rebuild (define a standard touch/edit protocol per language).
+- [ ] Bench harness: include end-to-end compile+link time and (when feasible) compiler-only time breakdowns (`asterc` time vs `clang/ld` time; `rustc` vs link) and report medians + variance.
+- [ ] Standardize `BENCH.md` run templates to include: runtime table, compile-time table (clean+incremental), command lines, toolchains, dataset hashes, and variance notes.
+- [ ] Add an automated hill-climb loop to the bench harness:
+      run targeted subsets quickly, accept/reject changes based on suite score, and emit a delta summary suitable for pasting into `BENCH.md`.
+- [ ] For each benchmark, maintain a tracked list of the current top 3 suspected bottlenecks (profile-guided) and the planned optimization(s) to clear the `<=0.80x` target.
+
+### 7) ML (post-production)
 - [ ] ML: define `aster_ml` architecture (tensor core, autograd, scheduler, device backends, serialization).
 - [ ] ML: build a python tinygrad parity harness (golden outputs + fuzz/property tests) to validate the Aster port.
 - [ ] ML: implement native tensor core (`Tensor`, `Device`, `DType`, shape/strides, views, broadcasting, reductions).
