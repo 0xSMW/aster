@@ -89,9 +89,9 @@ Legend: [x] done, [ ] todo, [~] in progress
       Compatibility target: `https://platform.openai.com/docs/llms.txt` (streaming, tool-calls, JSON).
 - [ ] Implement aster CLI (build, run, test, bench) and minimal package graph.
 - [ ] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
-- [ ] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
+- [x] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
 - [ ] Add asterfmt deterministic formatter and formatting tests.
-- [ ] Add language spec for memory model, effects, and FFI ABI.
+- [x] Add language spec for memory model, effects, and FFI ABI.
 - [ ] Add conformance test suite (parser/type/IR/codegen) + fuzzing harness.
 - [ ] Add perf governance (pinned toolchains, perf CI, `BENCH.md` automation).
 - [ ] Add debug info + symbolization (DWARF, stack traces).

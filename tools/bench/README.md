@@ -41,3 +41,20 @@ Useful knobs:
 - `FS_BENCH_LIST_MAX_LINES`, `FS_BENCH_TREEWALK_LIST_MAX_LINES`: cap list size.
 - `FS_BENCH_TREEWALK_MODE`: `bulk` (getattrlistbulk) or `fts`.
 - `FS_BENCH_CPP_MODE`: force C++ mode (`fts` or `bulk`) for apples-to-apples.
+
+## Recording Runs
+
+To generate a BENCH.md-ready markdown snippet (including fixed dataset hashes
+when enabled), use:
+
+```bash
+BENCH_RECORD_TITLE="full suite" \
+BENCH_RECORD_CMD="BENCH_BUILD_TIMING=1 FS_BENCH_LIST_FIXED=1 FS_BENCH_TREEWALK_LIST_FIXED=1 tools/bench/run.sh" \
+tools/bench/record_run.sh
+```
+
+This writes:
+- `.context/bench/record/run_*.txt` (raw stdout)
+- `.context/bench/record/run_*.md` (markdown snippet)
+
+To append directly to `BENCH.md`, set `BENCH_APPEND=1`.
