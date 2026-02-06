@@ -1,0 +1,18 @@
+#ifndef ASTER_SPAN_INC
+#define ASTER_SPAN_INC
+
+.equ SPAN_FILE, 0
+.equ SPAN_LO, 4
+.equ SPAN_HI, 8
+.equ SPAN_SIZE, 16
+
+.equ FILE_PATH_PTR, 0
+.equ FILE_PATH_LEN, 8
+.equ FILE_SRC_PTR, 16
+.equ FILE_SRC_LEN, 24
+.equ FILE_ENTRY_SIZE, 32
+
+.equ SOURCEMAP_VEC, 0
+.equ SOURCEMAP_SIZE, 32
+
+#endif

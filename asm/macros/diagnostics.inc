@@ -1,0 +1,14 @@
+#ifndef ASTER_DIAGNOSTICS_INC
+#define ASTER_DIAGNOSTICS_INC
+
+.equ DIAG_CODE, 0
+.equ DIAG_LEVEL, 4
+.equ DIAG_SPAN, 8
+.equ DIAG_MSG_PTR, 24
+.equ DIAG_MSG_LEN, 32
+.equ DIAG_SIZE, 40
+
+.equ DIAGS_VEC, 0
+.equ DIAGS_SIZE, 32
+
+#endif

@@ -1,7 +1,0 @@
-[package]
-name = "aster_span"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-

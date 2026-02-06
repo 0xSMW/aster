@@ -1,0 +1,47 @@
+#ifndef ASTER_LEXER_INC
+#define ASTER_LEXER_INC
+
+.equ LEX_SRC_PTR, 0
+.equ LEX_SRC_LEN, 8
+.equ LEX_POS, 16
+.equ LEX_INDENT_TOP, 24
+.equ LEX_PENDING_DEDENT, 32
+.equ LEX_PENDING_INDENT, 40
+.equ LEX_AT_LINE_START, 48
+.equ LEX_STACK, 56
+.equ LEX_STACK_MAX, 64
+.equ LEXER_SIZE, 568
+
+.equ TOK_KIND, 0
+.equ TOK_START, 4
+.equ TOK_END, 8
+.equ TOK_SIZE, 16
+
+.equ TOK_EOF, 0
+.equ TOK_IDENT, 1
+.equ TOK_INT, 2
+.equ TOK_NEWLINE, 3
+.equ TOK_INDENT, 4
+.equ TOK_DEDENT, 5
+.equ TOK_LPAREN, 6
+.equ TOK_RPAREN, 7
+.equ TOK_COMMA, 8
+.equ TOK_PLUS, 9
+.equ TOK_MINUS, 10
+.equ TOK_STAR, 11
+.equ TOK_SLASH, 12
+.equ TOK_EQ, 13
+.equ TOK_LT, 14
+.equ TOK_GT, 15
+.equ TOK_EQEQ, 16
+.equ TOK_KW_DEF, 20
+.equ TOK_KW_IF, 21
+.equ TOK_KW_ELSE, 22
+.equ TOK_KW_WHILE, 23
+.equ TOK_KW_RETURN, 24
+.equ TOK_KW_LET, 25
+.equ TOK_KW_VAR, 26
+.equ TOK_KW_CONST, 27
+.equ TOK_UNKNOWN, 255
+
+#endif

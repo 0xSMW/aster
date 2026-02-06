@@ -1,51 +1,89 @@
-# Aster language and compiler production specification (v1.0 engineering spec)
+# Aster language and compiler production specification (v2.0, assembly-first)
 
-This document defines the production-grade requirements for the Aster language, compiler, runtime, standard library, build tool, and benchmark system. The intent is to build a real, competitive compiler and ecosystem, not a prototype. Any implementation decisions must satisfy the constraints here unless amended by a written spec update.
+This document defines the production-grade requirements for the Aster language, compiler, runtime, standard library, build tool, and benchmark system. The implementation is assembly-first to maximize performance and to minimize runtime overhead. The language surface remains high-level and ergonomic like Ruby/Python.
 
 ## Task Tracker (kept current)
 
-Updated: 2026-01-31
+Updated: 2026-02-04
 Legend: [x] done, [ ] todo, [~] in progress
 
-- [x] Define concrete repo skeleton and create workspace scaffolding (Cargo workspace, crates, CI).
-- [x] Expand IR and type system specs (AST/HIR/MIR schemas, invariants).
-- [x] Add formal grammar appendix (EBNF).
-
-- [ ] Frontend: implement indentation-aware lexer with spans (aster_frontend).
-- [ ] Frontend: implement CST parser with error recovery + precedence.
-- [ ] Frontend: build AST lowering + AST serialization in aster_ast.
-- [ ] Formatter: implement asterfmt over CST with deterministic whitespace rules.
-
-- [ ] Name resolution: symbol tables, def IDs, module imports (aster_hir).
-- [ ] HIR lowering: resolve paths + attach DefIds and symbols.
-- [ ] Type checking: constraints + unification + numeric literal typing.
-- [ ] Trait solver: scoped resolution + caching + coherence checks.
-
-- [ ] MIR builder: build CFG + basic blocks + SSA locals.
-- [ ] MIR verifier: structural invariants + dominance checks.
-- [ ] Borrow checker: lifetime inference + borrow graph validation.
-- [ ] Escape analysis: stack promotion + allocation reporting.
-
-- [ ] Optimizations: const fold, DCE, CSE, LICM, bounds-check elim.
-- [ ] Inliner: threshold-based with size/compile-time knobs.
-- [ ] Codegen: Cranelift dev backend + LLVM release backend.
-- [ ] Debug info: DWARF emission + stable symbol mangling.
-
-- [ ] Module interface: `.asmod` format + hashing + dep metadata.
-- [ ] Incremental: content-addressed cache + invalidation strategy.
-- [ ] aster CLI: aster.toml, lockfile, dep resolver, build graph.
-
-- [ ] Runtime: panic runtime + stack traces + alloc hooks.
-- [ ] Stdlib core + alloc + io + sync + time + math + test.
-
-- [ ] Bench harness: datasets + C++/Rust baselines + runner.
-- [ ] Dashboards: perf time series + regression detection.
+- [x] Reset workspace to assembly-first plan and clean repo.
+- [x] Create assembly-first repo skeleton and macro scaffolding.
+- [x] Define assembly macro conventions, ABI, and object format targets.
+- [x] Add minimal build script and hello assembly test.
+- [x] Implement Aster0 bench compiler stub (template emitter + Aster->C for fswalk).
+- [x] Implement fswalk list replay with no helper objects (pure Aster + libc).
+- [x] Align fswalk list parsing across Aster/C++/Rust with raw byte scan.
+- [x] Split benchmark runs (kernels vs fswalk) to reduce cache interference.
+- [x] Add fixed fswalk dataset + metadata for repeatable runs.
+- [x] Add treewalk benchmark (live traversal) alongside fswalk list mode.
+- [x] Implement fswalk live traversal in Aster via fts (no helpers).
+- [x] Force C++ fswalk traversal to fts in harness for apples-to-apples.
+- [x] Add C++ treewalk bulk mode and align harness defaults with Aster bulk.
+- [x] Default benchmark harness to Aster-only backend (no asm templates).
+- [x] Add treewalk bulk mode using getattrlistbulk (Aster-only, no helpers).
+- [x] Add C-emit vectorization hints (`__restrict__`, clang loop pragmas).
+- [x] Tune kernel Aster0 sources (tiled stencil, FSM regex, pointer JSON).
+- [x] Add treewalk bulk file sizes via ATTR_FILE_DATALENGTH (no per-file fstatat).
+- [x] Add treewalk bulk buffer override (FS_BENCH_BULK_BUF).
+- [x] Optimize bench kernels (regex pointer scan, JSON digit unroll, robin hood hashmap).
+- [x] Add JSON 8-byte pre-scan and packed robin hood metadata.
+- [x] Increase treewalk bulk buffer default to 1MB.
+- [x] Add x86_64 support for arena + string + hash runtime primitives.
+- [x] Compile dot/gemm/stencil from Aster source (Aster0 -> C -> asm).
+- [x] Add Aster0 build cache (content hash + backend key).
+- [x] Add direct-ASM backend for kernel benchmarks (dot/gemm/stencil/sort).
+- [ ] (optional) Add ASM templates for microbench experiments (not used for scoring).
+- [x] Add module graph builder + cache (aster_build.py) with fixtures.
+- [x] Implement macro primitives in assembly (arena, vec, string, hash).
+- [x] Add x86_64 support for vec + span + diagnostics + lexer + parser stubs.
+- [x] Add lexer indentation + parser expr assembly tests (arm64 + x86_64).
+- [~] Implement aster_span core types in assembly (FileId, Span, SourceMap).
+- [~] Implement aster_diagnostics in assembly (spans, reports).
+- [~] Implement aster_frontend lexer (indentation, spans, tokens) in assembly.
+- [~] Implement CST parser with error recovery + precedence in assembly.
+- [ ] Implement aster_ast data model + serialization helpers in assembly.
+- [ ] Implement HIR + desugaring pipeline (surface -> HIR).
+- [ ] Implement name resolution, symbol tables, and module imports.
+- [ ] Implement type checking (constraints + unification) and effects.
+- [ ] Implement borrow rules, `noalloc` checking, and effect enforcement.
+- [ ] Implement MIR/SSA builder and verifier.
+- [ ] Implement optimizer passes (const fold, DCE, CSE, LICM, bounds-check elim).
+- [ ] Implement inliner and register allocator tuned for build time and runtime.
+- [ ] Implement codegen to assembly for target triples (start with host).
+- [ ] Implement runtime (panic, alloc hooks, stack traces) and core stdlib.
+- [ ] Implement aster CLI (build, run, test, bench) and minimal package graph.
+- [~] Implement benchmark harness with C++/Rust baselines and dashboards.
+- [ ] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
+- [ ] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
+- [ ] Implement stdlib fs traversal APIs (fts/opendir) to replace direct libc calls in benches.
+- [~] Extend Aster0 subset (arrays, structs, calls, externs; added for-loops + type inference) until real frontend is ready.
+- [~] Extend Aster0 subset to cover structs/slices/return conventions (remove C transpile step).
+- [x] Aster0: handle `use` lines + extern prototypes in C-emit for modules.
+- [ ] Replace Aster0 stub with true frontend -> IR -> codegen (self-hosted path).
+- [ ] Add asterfmt deterministic formatter and formatting tests.
+- [ ] Add language spec for memory model, effects, and FFI ABI.
+- [ ] Add conformance test suite (parser/type/IR/codegen) + fuzzing harness.
+- [ ] Add perf governance (pinned toolchains, perf CI, BENCH.md automation).
+- [x] Stabilize fswalk dataset sizing (configurable list size + repeatability checks).
+- [x] Add benchmark variance tracking (N runs, stddev, cache-state notes).
+- [x] Add benchmark isolation modes to CLI (kernels vs IO benches).
+- [x] Expand benchmark suite (JSON parse, regex, sort, hashmap, async IO, treewalk).
+- [x] Add dircount benchmark (live traversal count-only).
+- [x] Add fsinventory benchmark (live traversal inventory: files/dirs/symlinks + name hash).
+- [~] Implement deterministic build cache + incremental recompilation DAG.
+- [x] Define stdlib ABI for slices/strings/arrays (layout + calling convention).
+- [ ] Implement borrow checker prototype for `ref`/`mut ref` and `noalloc` enforcement.
+- [ ] Add debug info + symbolization (DWARF, stack traces).
+- [ ] Build test runner + golden output harness for stdlib and compiler tests.
+- [ ] Add module/package registry layout and lockfile semantics.
+- [ ] Add release engineering (versioning, packages, installer, docs site).
 
 Keep this list updated as work progresses.
 
 ## 1) Product goals
 
-Aster is a statically typed, ahead-of-time compiled, native-code language with Python/Ruby-like ergonomics and C++/Rust-class performance on algorithmic kernels.
+Aster is a statically typed, ahead-of-time compiled, native-code language with Python/Ruby-like ergonomics and C++/Rust-class performance on algorithmic kernels. The compiler and runtime are implemented in assembly for maximum performance and control.
 
 Primary objectives:
 - Predictable performance: typed hot loops compile to tight machine code with no hidden dynamic dispatch or mandatory GC barriers.
@@ -56,163 +94,222 @@ Primary objectives:
 
 Non-negotiable acceptance gates (must be measurable):
 - Runtime performance: kernels within 1.05-1.25x of the C++/Rust baseline on the majority of core benchmarks.
-- Noalloc enforcement: @noalloc must be sound and enforced transitively.
+- Build performance: >80% win rate vs C++ and Rust on build time and run time under pinned toolchains.
+- Noalloc enforcement: `noalloc` must be sound and enforced transitively.
 - Incremental rebuilds: small edits in a leaf module should not trigger whole-program rebuilds.
 - Deterministic builds: same inputs produce identical outputs (bit-for-bit) for release builds, modulo toolchain version IDs.
 
-## 2) Repository skeleton and build system (concrete)
+## 2) Assembly-first implementation constraints
 
-### 2.1 Workspace layout (actual directories)
+- The compiler, runtime, and core tooling are written in assembly for the primary target(s).
+- Use a small macro-assembly layer to keep code readable and to enforce calling conventions.
+- All compiler data structures use arena allocation with explicit lifetimes and reuse.
+- The compiler must be self-contained with minimal external dependencies (assembler and linker only).
+- The first supported target is the host target (x86_64 SysV or arm64 macOS), with additional targets added later.
 
-This repo is a Rust workspace and the canonical structure is:
+## 3) Repository layout (assembly-first)
 
 ```
 .
-├─ Cargo.toml               # workspace
-├─ rust-toolchain.toml      # pinned toolchain
-├─ crates/
-│  ├─ aster/                # `aster` CLI (build/run/test/bench)
-│  ├─ asterc/               # compiler driver (invoked by aster)
-│  ├─ aster_frontend/       # lexer, parser, CST/AST
-│  ├─ aster_ast/            # AST data model
-│  ├─ aster_hir/            # HIR data model
-│  ├─ aster_mir/            # MIR data model
-│  ├─ aster_typeck/         # type checking + inference
-│  ├─ aster_codegen/        # Cranelift/LLVM backends
-│  ├─ aster_runtime/        # runtime hooks + panic + alloc
-│  ├─ aster_diagnostics/    # diagnostics, spans, reporting
-│  ├─ aster_span/           # FileId, Span, SourceMap
-│  ├─ asterfmt/             # formatter
-│  └─ asterlsp/             # LSP server
-├─ stdlib/                  # stdlib source (Aster)
-├─ tests/                   # compiler + stdlib tests
-├─ tools/                   # bindgen, docgen, perf tools
-├─ perf/                    # self-profile tooling
-├─ aster-bench/             # benchmarks + harness
-└─ .github/workflows/ci.yml
+├─ INIT.md
+├─ AGENTS.md
+├─ asm/
+│  ├─ macros/              # macro-assembly utilities (strings, vectors, hash maps)
+│  ├─ compiler/            # lexer, parser, AST, HIR, MIR, codegen
+│  ├─ runtime/             # panic, alloc hooks, stack traces
+│  ├─ driver/              # aster CLI and build graph
+│  └─ tests/               # low-level unit tests in assembly
+├─ aster/
+│  ├─ stdlib/              # Aster standard library source
+│  ├─ tests/               # language-level tests
+│  └─ bench/               # Aster benchmarks
+├─ tools/
+│  ├─ build/               # build scripts for asm -> obj -> exe
+│  └─ bench/               # harness and baseline runners
+└─ docs/
+   └─ spec/                # language, ABI, IR documentation
 ```
 
-This skeleton is already created in the repo and should be filled in place (do not reorganize unless spec changes).
+## 4) Convention over configuration (language author rules)
 
-### 2.2 Crate responsibilities
+These rules remove configuration choices and make code and projects predictable.
 
-- `aster`: user-facing CLI, invokes `asterc` and manages build graph and caching.
-- `asterc`: compiler driver, orchestrates frontend, passes, and codegen.
-- `aster_frontend`: lexing, parsing, CST building, AST construction.
-- `aster_ast`: AST data types and serialization helpers.
-- `aster_hir`: HIR data types and IDs for resolved symbols.
-- `aster_mir`: MIR data types and SSA invariants.
-- `aster_typeck`: type inference, constraint solving, trait resolution.
-- `aster_codegen`: Cranelift + LLVM integration, target lowering.
-- `aster_runtime`: panic runtime, alloc hooks, stack traces, noalloc enforcement.
-- `aster_diagnostics`: diagnostics engine, error codes, linting.
-- `aster_span`: source map, FileId, Span.
-- `asterfmt`: stable formatter.
-- `asterlsp`: LSP server.
+Project layout and build:
+- One module per file; module name equals the file path relative to project root.
+- Entry point is `src/main.as` containing `def main()`; libraries use `src/lib.as`.
+- The build root is the directory containing `aster.toml`; if missing, the current directory is the root.
+- Default build profile is `dev`; `release` and `bench` are fixed profiles with no custom variants.
+- Dependencies resolve from `aster.toml` and a lockfile; no alternate registries without explicit tooling.
 
-### 2.3 Build system
+Naming and style:
+- 4-space indentation; tabs are illegal.
+- `snake_case` for functions and variables, `CamelCase` for types, `SCREAMING_SNAKE` for constants.
+- Single quotes for chars, double quotes for strings.
+- Type annotations use the keyword `is`; return types use the keyword `returns`.
+- Block headers use `then` or `do`; blocks end by indentation (no trailing `:` or `end`).
+- Type constructors use `of`: `Array of T`, `Result of (T, E)`, `slice of T`, `ptr of T`.
+- Modifiers are keywords: `async`, `extern`, `unsafe`, `noalloc`.
+- Trailing commas are required in multiline lists (params, array literals, struct literals).
+- Formatting is owned by `asterfmt`; manual formatting is not a supported workflow.
 
-- Rust workspace with pinned toolchain in `rust-toolchain.toml`.
-- `aster` uses aster.toml manifests and a lockfile for deterministic builds.
-- Build modes:
-  - dev: Cranelift backend, incremental on, debug info on.
-  - release: LLVM backend, full optimizations, optional LTO.
-  - bench: release + instrumentation.
-- External dependencies:
-  - LLVM (preferred via llvm-sys or equivalent)
-  - Cranelift (bytecodealliance crates)
-  - SIMD intrinsics (std or target-specific)
+Typing and effects:
+- Public items must declare explicit types; local variables can be inferred.
+- Default integer type is `i64`; default float type is `f64`.
+- Numeric literal suffixes override defaults (`42u32`, `3.0f32`).
+- Functions are effect-pure by default; effectful functions must declare effects in the signature.
+- Error handling uses `Result` and `try`; exceptions are not implicit.
 
-### 2.4 CI and quality gates
+Memory and performance:
+- Value types live on the stack by default; heap allocation requires `class` or explicit `alloc`.
+- `noalloc` is enforced transitively and is the default for `core` and `bench` modules.
+- Borrowing is explicit with `ref`/`mut ref`; moves are default for non-Copy types.
+- Bounds checks are required unless the compiler can prove safety or the code opts into `unsafe`.
 
-The CI configuration (`.github/workflows/ci.yml`) must enforce:
-- `cargo fmt --check`
-- `cargo clippy -- -D warnings`
-- `cargo test --workspace`
-- (Later) benchmark smoke suite
+Modules and interoperability:
+- Imports use `use foo.bar` only; star imports are forbidden.
+- C interop uses `extern` declarations and the C ABI by default.
+- Stable symbol mangling is deterministic across builds.
 
-## 3) Language design (surface syntax and semantics)
+## 5) Language capability guide (MECE examples)
 
-### 3.1 Lexing and formatting
-- Indentation defines blocks. Tabs are illegal.
-- Indent unit is 4 spaces.
-- Whitespace rules are deterministic and enforced by asterfmt.
-- Comments: `#` to end of line.
-- Identifiers are Unicode-normalized to NFC; keywords are ASCII.
-- Strings are UTF-8; `str` is a borrowed UTF-8 view with explicit length.
+The following examples are mutually exclusive and collectively exhaustive across
+the major paradigms taught in standard programming curricula. Each snippet is a
+capability target for the compiler and runtime, and should be kept in sync with
+the implementation roadmap.
 
-### 3.2 Evaluation order
-- Left-to-right for expressions and argument lists.
-- No hidden reordering of side effects.
+1) Imperative / procedural (control flow, loops, state)
 
-### 3.3 Types
-- Static typing with local type inference.
-- Explicit types required for public API surfaces: exported functions, module constants, struct fields, trait methods.
-- No whole-program inference.
+```aster
+def checksum(bytes is slice of u8) returns u32
+    var sum is u32 = 0
+    var i is usize = 0
+    while i < bytes.len() do
+        sum = sum + bytes[i]
+        i = i + 1
+    return sum
+```
 
-Built-in types:
-- Integers: i8 i16 i32 i64 isize, u8 u16 u32 u64 usize
-- Floats: f32 f64
-- bool, char (Unicode scalar)
-- str (borrowed UTF-8 view), String (owning)
-- slice[T] (borrowed contiguous view), Array[T] (owning growable)
-- span[T, N] (fixed-size stack value)
-- ptr[T] (unsafe raw pointer)
-- Option[T], Result[T, E]
+2) Object-oriented (encapsulation, methods, interfaces)
 
-### 3.4 Structs, enums, classes
-- struct: value type with predictable layout
-- enum: tagged union with niche-filling where possible
-- class: reference type with explicit heap allocation
-- layout control via @repr(C), @packed, @align(n)
+```aster
+class Counter
+    var value is i64
 
-### 3.5 Traits and generics
-- Traits (interfaces) with explicit bounds for operator overloading and constraints.
-- Default monomorphization for generics.
-- Optional dictionary-passing mode for code size and compile-time control.
-- Dynamic dispatch only via `dyn Trait` and explicit vtable types.
+    def init(start is i64) returns Self
+        let self is Self = alloc Counter
+        self.value = start
+        return self
 
-Trait resolution rules:
-- Scoped resolution (module + imports); no global search.
-- Coherence rules to prevent conflicting impls.
-- Deterministic, cached resolution results keyed by module interface hash.
+    def inc(self is ref Self) returns i64
+        self.value = self.value + 1
+        return self.value
 
-### 3.6 Ownership and borrowing
-- Value types are moved by default, copied only for Copy types.
-- Borrowing rules: any number of immutable borrows OR one mutable borrow per scope.
-- Non-lexical lifetime shortening allowed where proven.
-- Interior mutability only via explicit types (Cell, Mutex, Atomic).
-- Unsafe blocks exist but must be explicit and auditable.
+trait Printable
+    def print(self is ref Self) returns Result of ()
 
-### 3.7 Effects and purity
-- Functions are effect-pure by default (no implicit global state mutations).
-- Side effects must use explicit effectful APIs or marked effect types.
-- Effect inference allowed within a function body; public signatures must declare effects.
+impl Printable for Counter
+    def print(self is ref Self) returns Result of ()
+        io.print("count=", self.value)
+        return Ok(())
+```
 
-### 3.8 Error handling
-- Result[T, E] with `try` for propagation and `catch` for recovery.
-- `panic` for unrecoverable invariants.
-- No implicit exceptions in v1.0.
+3) Functional (higher-order functions, immutability)
 
-### 3.9 Concurrency and async
-- Native threads and atomics in core.
-- async/await compiled to state machines.
-- Data-race freedom in safe code; Send/Sync-like traits required for thread transfer.
-- Memory model consistent with C11/C++11 atomics.
+```aster
+def square(x is i64) returns i64
+    return x * x
 
-## 4) Compiler architecture (detailed)
+def sum_squares(nums is slice of i64) returns i64
+    let mapped is Array of i64 = nums.map(square)
+    return mapped.fold(0, add)
 
-### 4.1 Source infrastructure
+def add(a is i64, b is i64) returns i64
+    return a + b
+```
 
-All IR nodes must carry spans and stable IDs.
+4) Generic / parametric polymorphism (type abstraction)
+
+```aster
+trait Ord of T
+    def lt(a is T, b is T) returns bool
+
+def max of T where T is Ord (a is T, b is T) returns T
+    if Ord.lt(a, b) then
+        return b
+    return a
+```
+
+5) Data-oriented / numerical (arrays, spans, noalloc)
+
+```aster
+noalloc def matmul(a is slice of f64, b is slice of f64, out is mut ref slice of f64, n is usize) returns ()
+    var i is usize = 0
+    while i < n do
+        var j is usize = 0
+        while j < n do
+            var sum is f64 = 0.0
+            var k is usize = 0
+            while k < n do
+                sum = sum + a[i * n + k] * b[k * n + j]
+                k = k + 1
+            out[i * n + j] = sum
+            j = j + 1
+        i = i + 1
+```
+
+6) Concurrent / async (tasks, await, channels)
+
+```aster
+async def fetch_all(urls is slice of String) returns Array of Result of (String, Error)
+    let tasks is Array of Task of Result of (String, Error) = Array.new()
+    for each url in urls do
+        tasks.push(task.spawn(http.get, url))
+    return await task.join_all(tasks)
+```
+
+7) Systems / low-level (unsafe, FFI, explicit memory)
+
+```aster
+extern def memcpy(dst is ptr of u8, src is ptr of u8, n is usize) returns ptr of u8
+
+unsafe def fill(buf is ptr of u8, n is usize, value is u8) returns ()
+    var i is usize = 0
+    while i < n do
+        *(buf + i) = value
+        i = i + 1
+```
+
+8) Scripting / automation (files, text, JSON, CLI)
+
+```aster
+def main() returns Result of ()
+    let args is Array of String = os.args()
+    if args.len() < 2 then
+        io.print("usage: logcount <path>")
+        return Ok(())
+
+    let text is String = fs.read_file(args[1])?
+    let doc is Json = json.parse(text)?
+    let events is Array of Json = doc.get("events")?.as_array()?
+    let errors is usize = events.filter(is_error_event).len()
+    io.print("errors=", errors)
+    return Ok(())
+
+def is_error_event(event is Json) returns bool
+    return event.get("level")?.as_str()? == "ERROR"
+```
+
+## 6) Source infrastructure (assembly data model)
+
+All IR nodes carry spans and stable IDs. IDs are 32-bit to keep structures compact.
 
 ```
 FileId: u32
 Span { file: FileId, lo: u32, hi: u32 }
-NodeId: u32                 # local ID within a compilation unit
-DefId { crate_id: u32, idx: u32 }  # globally unique
-SymbolId: u32               # interned string ID
-TypeId: u32                 # interned type ID
+NodeId: u32
+DefId { crate_id: u32, idx: u32 }
+SymbolId: u32
+TypeId: u32
 ```
 
 Source maps must support:
@@ -220,228 +317,61 @@ Source maps must support:
 - macro expansion tracking
 - deterministic ordering
 
-### 4.2 AST schema (producer: parser)
+## 7) Compiler architecture (assembly-first)
 
-AST is purely syntactic with minimal desugaring.
+Pipeline stages:
+1) Lexing (indentation-aware) -> tokens
+2) Parsing -> CST
+3) AST build + desugar
+4) Name resolution -> HIR with DefIds
+5) Type checking + effect checking
+6) MIR/SSA build + verifier
+7) Optimizer passes
+8) Codegen to assembly
+9) Assemble + link -> binary
 
-```
-Module {
-  name: Path,
-  items: Vec<Item>,
-  span: Span
-}
+Implementation constraints:
+- All stages share an arena allocator and stable IDs.
+- Diagnostics are created during all stages and rendered at the end.
+- No stage allocates inside hot loops unless explicitly annotated.
 
-Item = Function | Struct | Enum | Class | Trait | Impl | Const | Use
+## 8) Bootstrapping strategy (zero to self-hosting)
 
-Function {
-  name: Ident,
-  params: Vec<Param>,
-  ret: TypeRef,
-  body: Block,
-  attrs: Vec<Attr>,
-  vis: Visibility,
-  span: Span
-}
+Stage 0: Toolchain and macro-assembly library
+- Pick primary assembler and linker for the host target.
+- Implement macro library for strings, vectors, hash maps, and arenas.
+- Build a minimal test runner for assembly unit tests.
 
-Param { name: Ident, ty: TypeRef, span: Span }
+Stage 1: Aster0 compiler (assembly)
+- Implement lexer, parser, and a tiny type checker for numeric code.
+- Generate assembly directly (no optimizer yet).
+- Support basic functions, structs, loops, and arrays.
 
-Block { stmts: Vec<Stmt>, span: Span }
+Stage 2: Aster1 compiler (assembly)
+- Add HIR, MIR, and basic optimizations (const fold, DCE).
+- Implement bounds-check elimination where provable.
+- Add diagnostics with spans and multi-span notes.
 
-Stmt = Let | Assign | Expr | Return | If | While | ForRange | Break | Continue | Defer | Require
+Stage 3: Aster2 compiler (assembly)
+- Add borrow checking, escape analysis, and `noalloc` enforcement.
+- Add inliner and a basic register allocator tuned for build time.
+- Expand stdlib and add benchmark harness.
 
-Expr =
-  Lit | Name | Call | Index | Field | Unary | Binary | Cast | IfExpr | BlockExpr |
-  StructLit | ArrayLit | Range | Lambda
+Stage 4: Performance convergence
+- Implement LICM, CSE, and peephole optimizations.
+- Add vectorization patterns for common kernels.
+- Add incremental compilation with module interfaces.
 
-TypeRef =
-  Path | Slice(TypeRef) | Array(TypeRef, ConstExpr) | Ptr(TypeRef) | Ref(TypeRef, Mut) |
-  Tuple(Vec<TypeRef>) | Fn(Vec<TypeRef>, TypeRef) | Generic(Path, Vec<TypeRef>)
-```
+Stage 5: Maturity and portability
+- Add second target triple and cross-compile toolchain.
+- Stabilize ABI, module format, and deterministic builds.
+- Enable self-hosting by compiling the compiler with itself.
 
-### 4.3 HIR schema (producer: name resolution)
+## 9) Benchmarks and hill-climbing
 
-HIR is name-resolved and assigns DefIds to all items and bindings.
+Benchmarks gate all optimizer changes.
 
-```
-HirModule {
-  crate_id: u32,
-  items: Vec<HirItem>,
-  symbols: SymbolTable
-}
-
-HirItem::Function(HirFunction)
-HirFunction { def_id: DefId, params: Vec<HirParam>, ret: TypeRef, body: HirBody, attrs, vis }
-HirParam { local_id: LocalId, name: SymbolId, ty: TypeRef }
-HirBody { blocks: Vec<HirBlock> }
-
-HirExpr carries resolved paths and DefIds for names.
-```
-
-### 4.4 Type system schema
-
-```
-TypeKind =
-  | Primitive(i8/i16/i32/i64/isize/u8/u16/u32/u64/usize/f32/f64/bool/char)
-  | Str | String
-  | Slice(TypeId)
-  | Array(TypeId, Const)
-  | Span(TypeId, Const)
-  | Ptr(TypeId, Mut)
-  | Ref(TypeId, Mut, Region)
-  | Tuple(Vec<TypeId>)
-  | Struct(DefId, Subst)
-  | Enum(DefId, Subst)
-  | Class(DefId, Subst)
-  | TraitObject(DefId, Subst)   # dyn Trait
-  | Fn(Vec<TypeId>, TypeId, Effects)
-  | Generic(ParamId)
-
-Const = Int(i64) | Bool(bool) | Param(ParamId)
-
-GenericParam = TypeParam | ConstParam | RegionParam
-Subst = Vec<GenericArg>
-GenericArg = Type(TypeId) | Const(Const) | Region(Region)
-
-Region = Static | Param(RegionParamId) | Inferred
-
-Effects = { alloc: bool, io: bool, unsafe: bool, async: bool, ... }
-```
-
-Type inference:
-- Hindley-Milner style with constraints and unification.
-- Trait constraints are solved by a scoped trait solver with caching.
-
-### 4.5 MIR schema (producer: lowering from HIR + typeck)
-
-MIR is SSA-based with explicit control flow graph.
-
-```
-MirBody {
-  blocks: Vec<BasicBlock>
-  locals: Vec<LocalDecl>
-  args: Vec<LocalId>
-  ret_local: LocalId
-}
-
-BasicBlock { stmts: Vec<Statement>, terminator: Terminator }
-
-Statement =
-  | Assign(Place, Rvalue)
-  | StorageLive(LocalId)
-  | StorageDead(LocalId)
-  | Validate(Place, ValidationKind)
-  | Nop
-
-Rvalue =
-  | Use(Operand)
-  | BinaryOp(Op, Operand, Operand)
-  | UnaryOp(Op, Operand)
-  | Cast(Operand, TypeId)
-  | Ref(Place, BorrowKind)
-  | Len(Place)
-  | Index(Place, Operand)
-  | Aggregate(AggregateKind, Vec<Operand>)
-
-Operand = Copy(Place) | Move(Place) | Constant(Const)
-
-Place = Local(LocalId, Projection[])   # Projection: Field, Index, Deref
-
-Terminator =
-  | Return
-  | Goto(BasicBlockId)
-  | SwitchInt { discr: Operand, targets: Vec<(i64, BasicBlockId)>, otherwise: BasicBlockId }
-  | Call { func: Operand, args: Vec<Operand>, dest: Place, target: BasicBlockId, unwind: BasicBlockId? }
-  | Assert { cond: Operand, target: BasicBlockId, msg: AssertMsg }
-  | Unreachable
-```
-
-MIR invariants:
-- SSA: each Local is assigned exactly once unless marked mutable and SSA-lifted.
-- All places are in-bounds unless wrapped by explicit bounds-check instructions.
-- No implicit heap allocation; allocations appear as explicit runtime calls.
-
-### 4.6 Borrow checking and escape analysis
-
-- Borrow checker operates on MIR with lifetimes inferred from HIR scopes.
-- Escape analysis determines stack vs heap allocation.
-- @noalloc attribute is enforced by verifying no allocation paths in call graph.
-
-### 4.7 Module interface (.asmod)
-
-Module interface is a binary format with a JSON debug export. Contents:
-
-```
-Header { magic, version, target_triple, compiler_version, hash }
-Exports {
-  functions: [ { def_id, name, params, ret, abi, effects } ]
-  types: [ { def_id, kind, layout, generics } ]
-  traits: [ { def_id, methods, bounds } ]
-  impls: [ { trait_def_id, type_def_id, where_clauses } ]
-  consts: [ { name, ty, value } ]
-}
-Dependencies { module_name, module_hash }
-```
-
-The `.asmod` hash is used for incremental compilation caching and invalidation.
-
-## 5) Backends
-
-### 5.1 Dev backend (Cranelift)
-- Fast compile, minimal optimization, correct ABI.
-- Used for `aster build` and `aster test` in dev mode.
-
-### 5.2 Release backend (LLVM)
-- Full optimization, LTO options, vectorization enabled.
-- Used for `aster build --release` and `aster bench`.
-
-### 5.3 Cross-platform
-- Target triples supported: macOS (arm64/x86_64), Linux (x86_64/arm64), Windows (x86_64).
-- Cross-compilation via target sysroot and prebuilt stdlib.
-
-## 6) Runtime and standard library
-
-Runtime:
-- Deterministic destruction (RAII and defer).
-- Panic runtime with stack traces and abort option.
-- Allocation hooks for @noalloc and alloc reports.
-
-Stdlib (v1.0 minimum):
-- core, alloc, io, time, sync, math, test
-- prebuilt artifacts per target triple
-- zero-cost abstractions where performance-critical
-
-## 7) Diagnostics and developer experience
-
-Compiler diagnostics must include:
-- precise spans and multi-span notes
-- type mismatch explanations with expected/actual types
-- borrow checker errors with lifetime hints
-- @noalloc violations with call chain
-- alloc report in JSON
-
-Tooling:
-- asterfmt: deterministic formatting
-- asterlsp: goto definition, hover type, semantic tokens, formatting on save
-- aster doc: API docs with type and effect signatures
-
-## 8) Build tool (aster CLI)
-
-Command surface:
-- `aster init`, `aster build`, `aster run`, `aster test`, `aster bench`
-- `aster fmt`, `aster doc`, `aster lsp`
-
-Manifest:
-- `aster.toml` defines package, targets, dependencies, features
-- lockfile required for reproducibility
-
-## 9) Benchmark system (production requirement)
-
-Benchmarks are mandatory and gate optimization changes.
-
-Bench structure:
-- Each benchmark: `bench.json`, `datasets/`, `ref/`, `impl/aster`, `impl/cpp`, `impl/rust`
-
-Core algorithm set (must be implemented in Aster/C++/Rust):
+Core algorithm set:
 1) Blocked GEMM
 2) FFT (radix-2 or mixed-radix)
 3) 2D/3D stencil
@@ -452,6 +382,9 @@ Core algorithm set (must be implemented in Aster/C++/Rust):
 8) Robin Hood hash table
 9) Aho-Corasick
 10) LZ77/LZ4-style compression
+11) Filesystem traversal (list/replay + stat)
+12) Tree traversal (live directory walk + metadata)
+13) Filesystem inventory (live traversal + counts + name hash)
 
 Metrics:
 - runtime wall/user
@@ -466,124 +399,17 @@ Scoring:
 - Headline = geometric mean over core benchmarks
 - Regression gate on statistical significance
 
-## 10) CI and quality gates
+Hill-climbing protocol:
+- Every optimization change runs the benchmark suite.
+- Only adopt changes that improve the geometric mean or improve at least 70% of benchmarks.
+- Tune thresholds for inlining, unrolling, and vectorization with automated sweeps.
 
-CI must include:
-- Lint, format, unit tests
-- Integration tests for compiler + stdlib
-- Smoke benchmark suite (<10 min)
-- Nightly core suite
-- Weekly full suite + perf counters
-
-Quality requirements:
-- Fuzzing of lexer/parser/typechecker
-- IR verifier on every pass
-- Deterministic build verification
-
-## 11) Security and reproducibility
-
-- Hermetic builds with cached dependencies
-- No network access during compilation except explicit package fetch
-- Reproducible releases with pinned toolchains
-
-## 12) Implementation roadmap (production)
-
-Phase 0: Parser + formatter + module system skeleton
-- Exit: stable formatting, deterministic AST, module import graph works
-
-Phase 1: Typed core + numeric loops + slices
-- Exit: kernel suite runs correctly; dot/matmul within 3-10x baseline
-
-Phase 2: MIR + basic optimizations + bounds-check elimination
-- Exit: kernel suite within 1.5-2x baseline
-
-Phase 3: Borrow/escape analysis + @noalloc + alloc report
-- Exit: inner-loop allocations eliminated where provable
-
-Phase 4: Generics + traits + monomorphization + inliner
-- Exit: data-structure suite within 1.2-1.7x baseline
-
-Phase 5: LLVM backend + ThinLTO + vectorization
-- Exit: core suite within 1.05-1.25x baseline
-
-Phase 6: Concurrency + async + stdlib maturity
-- Exit: concurrency suite competitive; safe code race-free
-
-Phase 7: Autotuning + regression gates + dashboards
-- Exit: automated knob tuning yields net improvements
-
-## 13) Definition of done (production)
+## 10) Definition of done (production)
 
 The compiler is production-ready when:
-- It builds the stdlib and all core benchmarks on all target triples.
+- It builds the stdlib and all core benchmarks on all supported targets.
 - It passes CI gates and has no known correctness bugs in the core spec.
 - It meets performance gates on the core benchmark suite.
 - It ships with stable formatting, LSP, and package management.
-
-## Appendix A: Formal grammar (EBNF)
-
-Lexical tokens:
-- IDENT, INT, FLOAT, STRING
-- NEWLINE, INDENT, DEDENT
-
-EBNF:
-
-```
-module      = "module" path NEWLINE { item } EOF ;
-path        = IDENT { "." IDENT } ;
-
-item        = function | struct | enum | trait | impl | const | use ;
-
-function    = "def" IDENT "(" params ")" "->" type ":" block ;
-params      = [ param { "," param } ] ;
-param       = IDENT ":" type ;
-
-struct      = "struct" IDENT [ generics ] ":" block ;
-enum        = "enum" IDENT [ generics ] ":" block ;
-trait       = "trait" IDENT [ generics ] ":" block ;
-impl        = "impl" [ generics ] type ":" block ;
-const       = "const" IDENT ":" type "=" expr NEWLINE ;
-use         = "use" path NEWLINE ;
-
-block       = NEWLINE INDENT { stmt } DEDENT ;
-
-stmt        = let_stmt | assign_stmt | if_stmt | while_stmt | for_stmt |
-              return_stmt | break_stmt | continue_stmt | defer_stmt |
-              require_stmt | expr_stmt ;
-
-let_stmt    = [ "var" ] IDENT [ ":" type ] "=" expr NEWLINE ;
-assign_stmt = lvalue assign_op expr NEWLINE ;
-assign_op   = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
-
-if_stmt     = "if" expr ":" block [ "elif" expr ":" block ] [ "else" ":" block ] ;
-while_stmt  = "while" expr ":" block ;
-for_stmt    = "for" IDENT "in" expr ".." expr ":" block ;
-return_stmt = "return" [ expr ] NEWLINE ;
-break_stmt  = "break" NEWLINE ;
-continue_stmt = "continue" NEWLINE ;
-defer_stmt  = "defer" block ;
-require_stmt = "require" expr NEWLINE ;
-expr_stmt   = expr NEWLINE ;
-
-lvalue      = IDENT { ( "." IDENT ) | ( "[" expr "]" ) } ;
-
-expr        = or_expr ;
-or_expr     = and_expr { "or" and_expr } ;
-and_expr    = eq_expr { "and" eq_expr } ;
-eq_expr     = cmp_expr { ("=="|"!=") cmp_expr } ;
-cmp_expr    = add_expr { ("<"|"<="|">"|">=") add_expr } ;
-add_expr    = mul_expr { ("+"|"-") mul_expr } ;
-mul_expr    = unary_expr { ("*"|"/"|"%") unary_expr } ;
-unary_expr  = ("-"|"not") unary_expr | call_expr ;
-
-call_expr   = primary { "(" [ args ] ")" | "[" expr "]" | "." IDENT } ;
-args        = expr { "," expr } ;
-
-primary     = INT | FLOAT | STRING | "true" | "false" | IDENT | "(" expr ")" ;
-
- type       = path | "slice" "[" type "]" | "span" "[" type "," INT "]" |
-              "ptr" "[" type "]" | "ref" "[" type "]" |
-              "(" type { "," type } ")" ;
-```
 
 End of spec.
