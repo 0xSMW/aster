@@ -1,0 +1,51 @@
+# Conductor workspace metadata (gitignored by convention, but keep it explicit here).
+.context/
+
+# Third-party reference clones (kept out of git).
+libraries/*
+!libraries/README.md
+
+# macOS filesystem noise.
+.DS_Store
+._*
+
+# Editors / IDEs.
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python bytecode / caches.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs.
+.venv/
+venv/
+
+# Aster build tool default output.
+.aster_build/
+
+# Generated build outputs (some historical outputs may be checked in; ignore extra locals).
+asm/tests/out/
+tools/build/out/
+tools/bench/out/
+
+# Common local outputs.
+compile_commands.json
+*.log
+*.tmp
+
+# Profiling / coverage.
+*.profraw
+*.profdata
+.coverage
+coverage.xml
+htmlcov/
+
+# Debug symbol bundles (macOS).
+*.dSYM/
