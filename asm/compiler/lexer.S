@@ -890,20 +890,38 @@ FUNC_BEGIN aster_lex__next
     ldrb w17, [x16, #6]
     // returns
     cmp w10, #'r'
-    b.ne .Lemit_ident
+    b.ne .Lkw_len7_noalloc
     cmp w11, #'e'
-    b.ne .Lemit_ident
+    b.ne .Lkw_len7_noalloc
     cmp w12, #'t'
-    b.ne .Lemit_ident
+    b.ne .Lkw_len7_noalloc
     cmp w13, #'u'
-    b.ne .Lemit_ident
+    b.ne .Lkw_len7_noalloc
     cmp w14, #'r'
-    b.ne .Lemit_ident
+    b.ne .Lkw_len7_noalloc
     cmp w15, #'n'
-    b.ne .Lemit_ident
+    b.ne .Lkw_len7_noalloc
     cmp w17, #'s'
-    b.ne .Lemit_ident
+    b.ne .Lkw_len7_noalloc
     mov w12, #TOK_KW_RETURNS
+    b .Lemit_kw
+.Lkw_len7_noalloc:
+    // noalloc
+    cmp w10, #'n'
+    b.ne .Lemit_ident
+    cmp w11, #'o'
+    b.ne .Lemit_ident
+    cmp w12, #'a'
+    b.ne .Lemit_ident
+    cmp w13, #'l'
+    b.ne .Lemit_ident
+    cmp w14, #'l'
+    b.ne .Lemit_ident
+    cmp w15, #'o'
+    b.ne .Lemit_ident
+    cmp w17, #'c'
+    b.ne .Lemit_ident
+    mov w12, #TOK_KW_NOALLOC
     b .Lemit_kw
 
 .Lkw_len8:
@@ -2030,25 +2048,50 @@ FUNC_BEGIN aster_lex__next
     movzbl (%r10,%rsi,1), %eax
     movzbl 1(%r10,%rsi,1), %edx
     cmpb $'r', %al
-    jne .Lemit_ident_x86
+    jne .Lkw_len7_noalloc_x86
     cmpb $'e', %dl
-    jne .Lemit_ident_x86
+    jne .Lkw_len7_noalloc_x86
     movzbl 2(%r10,%rsi,1), %edx
     cmpb $'t', %dl
-    jne .Lemit_ident_x86
+    jne .Lkw_len7_noalloc_x86
     movzbl 3(%r10,%rsi,1), %edx
     cmpb $'u', %dl
-    jne .Lemit_ident_x86
+    jne .Lkw_len7_noalloc_x86
     movzbl 4(%r10,%rsi,1), %edx
     cmpb $'r', %dl
-    jne .Lemit_ident_x86
+    jne .Lkw_len7_noalloc_x86
     movzbl 5(%r10,%rsi,1), %edx
     cmpb $'n', %dl
-    jne .Lemit_ident_x86
+    jne .Lkw_len7_noalloc_x86
     movzbl 6(%r10,%rsi,1), %edx
     cmpb $'s', %dl
-    jne .Lemit_ident_x86
+    jne .Lkw_len7_noalloc_x86
     movl $TOK_KW_RETURNS, %eax
+    jmp .Lemit_kw_x86
+.Lkw_len7_noalloc_x86:
+    // noalloc
+    movzbl (%r10,%rsi,1), %eax
+    movzbl 1(%r10,%rsi,1), %edx
+    cmpb $'n', %al
+    jne .Lemit_ident_x86
+    cmpb $'o', %dl
+    jne .Lemit_ident_x86
+    movzbl 2(%r10,%rsi,1), %edx
+    cmpb $'a', %dl
+    jne .Lemit_ident_x86
+    movzbl 3(%r10,%rsi,1), %edx
+    cmpb $'l', %dl
+    jne .Lemit_ident_x86
+    movzbl 4(%r10,%rsi,1), %edx
+    cmpb $'l', %dl
+    jne .Lemit_ident_x86
+    movzbl 5(%r10,%rsi,1), %edx
+    cmpb $'o', %dl
+    jne .Lemit_ident_x86
+    movzbl 6(%r10,%rsi,1), %edx
+    cmpb $'c', %dl
+    jne .Lemit_ident_x86
+    movl $TOK_KW_NOALLOC, %eax
     jmp .Lemit_kw_x86
 
 .Lkw_len8_x86:

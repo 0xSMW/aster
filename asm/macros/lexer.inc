@@ -75,6 +75,7 @@
 .equ TOK_KW_SLICE, 56
 .equ TOK_KW_TRUE, 57
 .equ TOK_KW_FALSE, 58
+.equ TOK_KW_NOALLOC, 59
 .equ TOK_UNKNOWN, 255
 
 #endif

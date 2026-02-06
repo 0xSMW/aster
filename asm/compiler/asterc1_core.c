@@ -92,6 +92,7 @@ enum {
   TOK_KW_SLICE = 56,
   TOK_KW_TRUE = 57,
   TOK_KW_FALSE = 58,
+  TOK_KW_NOALLOC = 59,
 };
 
 typedef enum {
@@ -163,6 +164,7 @@ typedef struct {
 } Param;
 
 typedef struct FuncDef {
+  size_t id; // stable index within Compiler.funcs
   const char* name;
   size_t name_len;
   Type* ret;
@@ -170,6 +172,11 @@ typedef struct FuncDef {
   size_t param_count;
   bool is_extern;
   bool is_varargs;
+  bool is_noalloc;
+  bool direct_alloc; // calls a known allocator directly (or unknown extern in strict mode)
+  size_t decl_tok;   // token index for diagnostics (start of decl)
+  size_t* calls;     // callee func ids
+  size_t call_count, call_cap;
   size_t body_start; // token index (inclusive), only for defs
   size_t body_end;   // token index (exclusive), only for defs
 } FuncDef;
@@ -448,6 +455,75 @@ static ConstDef* find_const(Compiler* c, const char* name, size_t name_len) {
   return NULL;
 }
 
+static bool is_known_alloc_fn(const char* name, size_t name_len) {
+  return str_eq(name, name_len, "malloc") || str_eq(name, name_len, "calloc") || str_eq(name, name_len, "realloc") ||
+         str_eq(name, name_len, "posix_memalign");
+}
+
+static bool is_known_nonalloc_extern(const char* name, size_t name_len) {
+  // A conservative whitelist so `noalloc` can still call common libc helpers.
+  return str_eq(name, name_len, "memcpy") || str_eq(name, name_len, "memset") || str_eq(name, name_len, "strlen") ||
+         str_eq(name, name_len, "printf") || str_eq(name, name_len, "puts") || str_eq(name, name_len, "write") ||
+         str_eq(name, name_len, "clock_gettime") || str_eq(name, name_len, "getenv") || str_eq(name, name_len, "atoi");
+}
+
+static void record_call(FuncDef* caller, FuncDef* callee) {
+  if (!caller || !callee) return;
+  // Avoid degenerate growth if a file contains repeated calls to the same callee.
+  for (size_t i = 0; i < caller->call_count; i++) {
+    if (caller->calls[i] == callee->id) return;
+  }
+  if (caller->call_count == caller->call_cap) {
+    caller->call_cap = caller->call_cap ? caller->call_cap * 2 : 16;
+    caller->calls = (size_t*)xrealloc(caller->calls, caller->call_cap * sizeof(size_t));
+  }
+  caller->calls[caller->call_count++] = callee->id;
+}
+
+static void analyze_noalloc(Compiler* c) {
+  const size_t n = c->nfuncs;
+  bool* may_alloc = (bool*)xmalloc(n);
+  memset(may_alloc, 0, n);
+
+  for (size_t i = 0; i < n; i++) {
+    FuncDef* f = c->funcs[i];
+    bool alloc = f->direct_alloc;
+    if (f->is_extern) {
+      // Externs are conservative: assume alloc unless whitelisted.
+      if (is_known_alloc_fn(f->name, f->name_len)) alloc = true;
+      else if (!is_known_nonalloc_extern(f->name, f->name_len)) alloc = true;
+    }
+    may_alloc[f->id] = alloc;
+  }
+
+  // Fixpoint: propagate alloc effects through the call graph.
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (size_t i = 0; i < n; i++) {
+      FuncDef* f = c->funcs[i];
+      if (may_alloc[f->id]) continue;
+      for (size_t j = 0; j < f->call_count; j++) {
+        size_t cid = f->calls[j];
+        if (cid < n && may_alloc[cid]) {
+          may_alloc[f->id] = true;
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  for (size_t i = 0; i < n; i++) {
+    FuncDef* f = c->funcs[i];
+    if (f->is_noalloc && may_alloc[f->id]) {
+      error_at_tok(c, (f->decl_tok < c->ntoks) ? &c->toks[f->decl_tok] : NULL, "`noalloc` function may allocate");
+    }
+  }
+
+  free(may_alloc);
+}
+
 static bool builtin_const(const char* name, size_t name_len, Type** out_ty, uint64_t* out_u) {
 #ifdef __APPLE__
   if (str_eq(name, name_len, "O_RDONLY")) {
@@ -586,6 +662,7 @@ static void push_func(Compiler* c, FuncDef* f) {
     c->capfuncs = c->capfuncs ? c->capfuncs * 2 : 64;
     c->funcs = (FuncDef**)xrealloc(c->funcs, c->capfuncs * sizeof(FuncDef*));
   }
+  f->id = c->nfuncs;
   c->funcs[c->nfuncs++] = f;
 }
 
@@ -978,6 +1055,7 @@ static bool is_varargs_name(const char* name, size_t name_len) {
 }
 
 static bool parse_extern_decl(Compiler* c) {
+  size_t decl_tok = c->i;
   if (!expect(c, TOK_KW_EXTERN, "`extern`")) return false;
   if (!expect(c, TOK_KW_DEF, "`def`")) return false;
   if (cur(c)->kind != TOK_IDENT) return false;
@@ -1004,11 +1082,14 @@ static bool parse_extern_decl(Compiler* c) {
   f->param_count = nparams;
   f->is_extern = true;
   f->is_varargs = is_varargs_name(name, name_len);
+  f->decl_tok = decl_tok;
   push_func(c, f);
   return true;
 }
 
 static bool parse_def_decl(Compiler* c) {
+  size_t decl_tok = c->i;
+  bool is_noalloc = accept(c, TOK_KW_NOALLOC);
   if (!expect(c, TOK_KW_DEF, "`def`")) return false;
   if (cur(c)->kind != TOK_IDENT) return false;
   const char* name = tok_ptr(c, cur(c));
@@ -1045,6 +1126,8 @@ static bool parse_def_decl(Compiler* c) {
   f->params = params;
   f->param_count = nparams;
   f->is_extern = false;
+  f->is_noalloc = is_noalloc;
+  f->decl_tok = decl_tok;
   f->body_start = body_start;
   f->body_end = body_end;
   push_func(c, f);
@@ -1441,10 +1524,10 @@ static Value parse_primary(FuncCtx* f, size_t* io_i) {
     }
     FuncDef* fn = find_func(c, name, name_len);
     if (!fn && str_eq(name, name_len, "calloc")) {
-      static FuncDef calloc_fn = {.name = "calloc", .name_len = 6, .param_count = 2, .is_extern = true};
+      static FuncDef calloc_fn = {.id = (size_t)-1, .name = "calloc", .name_len = 6, .param_count = 2, .is_extern = true};
       fn = &calloc_fn;
     } else if (!fn && str_eq(name, name_len, "memcpy")) {
-      static FuncDef memcpy_fn = {.name = "memcpy", .name_len = 6, .param_count = 3, .is_extern = true};
+      static FuncDef memcpy_fn = {.id = (size_t)-1, .name = "memcpy", .name_len = 6, .param_count = 3, .is_extern = true};
       fn = &memcpy_fn;
     }
     if (fn) return (Value){.kind = V_FUNC, .v.fn = fn};
@@ -1491,6 +1574,12 @@ static Value parse_postfix(FuncCtx* f, size_t* io_i, Value base) {
       if (c->toks[i].kind == TOK_RPAREN) i++;
 
       FuncDef* fn = base.v.fn;
+      // Record call graph edges for `noalloc` analysis.
+      if (is_known_alloc_fn(fn->name, fn->name_len)) {
+        f->f->direct_alloc = true;
+      } else if (fn->id != (size_t)-1) {
+        record_call(f->f, fn);
+      }
       Type* ret = fn->ret ? fn->ret : ty_void();
       if (!fn->ret && str_eq(fn->name, fn->name_len, "calloc")) ret = ptr_to(c, ty_void());
       if (!fn->ret && str_eq(fn->name, fn->name_len, "memcpy")) ret = ptr_to(c, ty_void());
@@ -2334,7 +2423,7 @@ int asterc1__compile_real(uint8_t* src, size_t len, FILE* out) {
       if (!parse_struct_decl(&c)) return 1;
       continue;
     }
-    if (k == TOK_KW_DEF) {
+    if (k == TOK_KW_DEF || k == TOK_KW_NOALLOC) {
       if (!parse_def_decl(&c)) return 1;
       continue;
     }
@@ -2360,6 +2449,9 @@ int asterc1__compile_real(uint8_t* src, size_t len, FILE* out) {
       if (!compile_func(&c, c.funcs[i])) return 1;
     }
   }
+
+  analyze_noalloc(&c);
+  if (c.had_error) return 1;
 
   emit_string_globals(&c);
   return 0;

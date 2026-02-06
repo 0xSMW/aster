@@ -75,6 +75,18 @@ def main() returns i32
     return 0
 ```
 
+#### `noalloc` (Effect Annotation)
+
+```aster
+noalloc def add1(x is i32) returns i32
+    return x + 1
+```
+
+`noalloc` is an effect annotation enforced transitively: a `noalloc` function
+must not call allocator functions (e.g. `malloc`, `calloc`, `realloc`) directly
+or indirectly through other functions. Externs are treated conservatively unless
+whitelisted as non-allocating.
+
 ## Types
 
 Builtins:
@@ -138,4 +150,3 @@ To support a native tinygrad port without breaking Aster1, the design needs:
 - A kernel authoring path: predictable loops, pointers/slices, and FFI.
 - A path to parametric polymorphism (generics/traits) that can be layered above
   Aster1 without changing Aster1 semantics.
-
