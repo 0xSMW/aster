@@ -87,8 +87,8 @@ Legend: [x] done, [ ] todo, [~] in progress
       TCP + DNS + TLS + HTTP client with streaming responses (SSE-style) on macOS first.
       Target: Aster can consume OpenAI-style streaming APIs natively (no shelling out).
       Compatibility target: `https://platform.openai.com/docs/llms.txt` (streaming, tool-calls, JSON).
-- [ ] Implement aster CLI (build, run, test, bench) and minimal package graph.
-- [ ] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
+- [x] Implement aster CLI (build, run, test, bench) and minimal package graph.
+- [x] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
 - [x] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
 - [ ] Add asterfmt deterministic formatter and formatting tests.
 - [x] Add language spec for memory model, effects, and FFI ABI.
