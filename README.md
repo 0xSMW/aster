@@ -1,6 +1,6 @@
 # Aster
 
-A statically typed, ahead-of-time compiled, native-code programming language with Python/Ruby-like ergonomics and C++/Rust-class performance. Aster began as a single prompt and represents 50+ iterations with gpt-5.2/3-codex.
+A statically typed, ahead-of-time compiled, native-code programming language with Python/Ruby-like ergonomics and C++/Rust-class performance. Aster began as a single prompt and represents 50+ iterations with gpt-5.2/3-codex. This project exists as an experiment and analysis of novel computer science capabilities in Codex models. 
 
 ```aster
 def dot(a is slice of f64, b is slice of f64, n is usize) returns f64
