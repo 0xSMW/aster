@@ -27,10 +27,14 @@ dash_o:
     .asciz "-o"
 dash_O3:
     .asciz "-O3"
-dash_fno_omit_fp:
-    .asciz "-fno-omit-frame-pointer"
 dash_Wno_override_module:
     .asciz "-Wno-override-module"
+dash_Wl_framework_accel:
+    .asciz "-Wl,-framework,Accelerate"
+env_link_accel:
+    .asciz "ASTER_LINK_ACCELERATE"
+env_link_obj:
+    .asciz "ASTER_LINK_OBJ"
 dotS:
     .asciz ".ll"
 
@@ -171,7 +175,7 @@ FUNC_BEGIN main
     ldr x0, [sp, #OFF_OUT_FP]
     bl _fclose
 
-    // spawn clang: clang -O3 -fno-omit-frame-pointer -Wno-override-module <asm> -o <out>
+    // spawn clang: clang -O3 -Wno-override-module <asm> -o <out>
     add x13, sp, #OFF_ARGV_ARR
     adrp x14, clang_str@PAGE
     add x14, x14, clang_str@PAGEOFF
@@ -179,20 +183,54 @@ FUNC_BEGIN main
     adrp x15, dash_O3@PAGE
     add x15, x15, dash_O3@PAGEOFF
     str x15, [x13, #8]
-    adrp x16, dash_fno_omit_fp@PAGE
-    add x16, x16, dash_fno_omit_fp@PAGEOFF
-    str x16, [x13, #16]
     adrp x16, dash_Wno_override_module@PAGE
     add x16, x16, dash_Wno_override_module@PAGEOFF
-    str x16, [x13, #24]
+    str x16, [x13, #16]
     ldr x17, [sp, #OFF_ASM_PATH]
-    str x17, [x13, #32]
+    str x17, [x13, #24]
     adrp x18, dash_o@PAGE
     add x18, x18, dash_o@PAGEOFF
-    str x18, [x13, #40]
+    str x18, [x13, #32]
     ldr x19, [sp, #OFF_OUT_PATH]
-    str x19, [x13, #48]
+    str x19, [x13, #40]
+    // default: no extra linker flags
+    str xzr, [x13, #48]
     str xzr, [x13, #56]
+
+    // Optional: link an extra object file (for benchmark/runtime helpers).
+    // Enabled via env var ASTER_LINK_OBJ=<path-to-.o>.
+    adrp x0, env_link_obj@PAGE
+    add x0, x0, env_link_obj@PAGEOFF
+    bl _getenv
+    // restore argv base (caller-saved across libc calls)
+    add x13, sp, #OFF_ARGV_ARR
+    cbz x0, .Lcheck_accel
+    ldrb w1, [x0]
+    cbz w1, .Lcheck_accel
+    cmp w1, #'0'
+    b.ne .Lhave_obj
+    ldrb w2, [x0, #1]
+    cbz w2, .Lcheck_accel
+.Lhave_obj:
+    str x0, [x13, #48]
+    b .Lno_accel
+
+.Lcheck_accel:
+    // Optional: link Accelerate for BLAS (`-Wl,-framework,Accelerate`).
+    // Enabled via env var ASTER_LINK_ACCELERATE=1.
+    adrp x0, env_link_accel@PAGE
+    add x0, x0, env_link_accel@PAGEOFF
+    bl _getenv
+    // restore argv base (caller-saved across libc calls)
+    add x13, sp, #OFF_ARGV_ARR
+    cbz x0, .Lno_accel
+    ldrb w1, [x0]
+    cmp w1, #'0'
+    b.eq .Lno_accel
+    adrp x2, dash_Wl_framework_accel@PAGE
+    add x2, x2, dash_Wl_framework_accel@PAGEOFF
+    str x2, [x13, #48]
+.Lno_accel:
 
     // environ
     adrp x20, _environ@GOTPAGE
@@ -388,23 +426,58 @@ FUNC_BEGIN main
     movq OFF_OUT_FP(%rsp), %rdi
     callq _fclose
 
-    // argv array for clang: clang -O3 -fno-omit-frame-pointer -Wno-override-module <ll> -o <out>
+    // argv array for clang: clang -O3 -Wno-override-module <ll> -o <out> [extra link flags]
     leaq OFF_ARGV_ARR(%rsp), %r8
     leaq clang_str(%rip), %rax
     movq %rax, 0(%r8)
     leaq dash_O3(%rip), %rax
     movq %rax, 8(%r8)
-    leaq dash_fno_omit_fp(%rip), %rax
-    movq %rax, 16(%r8)
     leaq dash_Wno_override_module(%rip), %rax
-    movq %rax, 24(%r8)
+    movq %rax, 16(%r8)
     movq OFF_LL_PATH(%rsp), %rax
-    movq %rax, 32(%r8)
+    movq %rax, 24(%r8)
     leaq dash_o(%rip), %rax
-    movq %rax, 40(%r8)
+    movq %rax, 32(%r8)
     movq OFF_OUT_PATH(%rsp), %rax
-    movq %rax, 48(%r8)
+    movq %rax, 40(%r8)
+    // default: no extra linker flags
+    movq $0, 48(%r8)
     movq $0, 56(%r8)
+
+    // Optional: link an extra object file (for benchmark/runtime helpers).
+    // Enabled via env var ASTER_LINK_OBJ=<path-to-.o>.
+    leaq env_link_obj(%rip), %rdi
+    callq _getenv
+    // restore argv base (caller-saved across libc calls)
+    leaq OFF_ARGV_ARR(%rsp), %r8
+    testq %rax, %rax
+    je .Lcheck_accel_x86
+    movzbl (%rax), %ecx
+    testb %cl, %cl
+    je .Lcheck_accel_x86
+    cmpb $'0', %cl
+    jne .Lhave_obj_x86
+    cmpb $0, 1(%rax)
+    je .Lcheck_accel_x86
+.Lhave_obj_x86:
+    movq %rax, 48(%r8)
+    jmp .Lno_accel_x86
+
+.Lcheck_accel_x86:
+    // Optional: link Accelerate for BLAS (`-Wl,-framework,Accelerate`).
+    // Enabled via env var ASTER_LINK_ACCELERATE=1.
+    leaq env_link_accel(%rip), %rdi
+    callq _getenv
+    // restore argv base (caller-saved across libc calls)
+    leaq OFF_ARGV_ARR(%rsp), %r8
+    testq %rax, %rax
+    je .Lno_accel_x86
+    movzbl (%rax), %eax
+    cmpb $'0', %al
+    je .Lno_accel_x86
+    leaq dash_Wl_framework_accel(%rip), %rax
+    movq %rax, 48(%r8)
+.Lno_accel_x86:
 
     // environ
     movq _environ@GOTPCREL(%rip), %rax

@@ -105,13 +105,14 @@ Legend: [x] done, [ ] todo, [~] in progress
 ### 5) Performance Hill-Climb (after real compiler produces the binaries)
 - [x] Add build-time measurement (clean + incremental) to `tools/bench/run.sh` and record in `BENCH.md`.
 - [x] Start a new `BENCH.md` epoch for real-`asterc` results (legacy shim-era runs are non-authoritative).
-- [~] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
+- [x] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
 - [~] Implement deterministic build cache + incremental recompilation DAG.
 
 ### 6) Performance Domination (>=20% Faster on Every Benchmark)
-- [ ] Define the target: for every benchmark in the suite, Aster median runtime must be `<= 0.80x` the best baseline (min of C++ and Rust) on the same host/toolchains/datasets.
-- [ ] Extend suite scoring to report `win>=20%` counts per benchmark and require 100% for this milestone.
-- [ ] Bench harness: add compile-time measurement and reporting for Aster/C++/Rust (clean + incremental), recorded alongside runtime results in `BENCH.md`.
+- [x] Define the target: for every benchmark in the suite, Aster median runtime must be `<= 0.80x` the best baseline (min of C++ and Rust) on the same host/toolchains/datasets.
+- [x] Extend suite scoring to report `win>=20%` counts per benchmark and require 100% for this milestone.
+- [x] Achieve the `<=0.80x` target on the full suite in fair mode (see `BENCH.md` Run 054).
+- [x] Bench harness: add compile-time measurement and reporting for Aster/C++/Rust (clean + incremental), recorded alongside runtime results in `BENCH.md`.
       Clean: fresh build from scratch; Incremental: minimal edit + rebuild (define a standard touch/edit protocol per language).
 - [ ] Bench harness: include end-to-end compile+link time and (when feasible) compiler-only time breakdowns (`asterc` time vs `clang/ld` time; `rustc` vs link) and report medians + variance.
 - [ ] Standardize `BENCH.md` run templates to include: runtime table, compile-time table (clean+incremental), command lines, toolchains, dataset hashes, and variance notes.

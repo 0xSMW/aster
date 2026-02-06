@@ -2147,3 +2147,213 @@ Geometric mean (aster/baseline): 1.082x
 Win rate (aster < baseline): 3/12 = 25.0%
 Margin >=5% faster (<=0.95x): 0/12 = 0.0%
 Margin >=15% faster (<=0.85x): 0/12 = 0.0%
+
+## Run 054 — section 6 domination (full suite, fsroot_huge, BENCH_ITERS=20)
+Command: `BENCH_ITERS=20 FS_BENCH_ROOT='/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/fsroot_huge' FS_BENCH_LIST_FIXED=1 FS_BENCH_TREEWALK_LIST_FIXED=1 tools/bench/run.sh`
+Log: `/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/record/run_20260207_010912.txt`
+
+FS dataset:
+- FS_BENCH_ROOT: /Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/fsroot_huge
+- FS_BENCH_MAX_DEPTH: 6
+- fswalk_list: sha256=62653d093251de7decda76d583d445d7a8715b5ab79a3b4c689a002a21667098, bytes=9988983, lines=99332
+- treewalk_dirs: sha256=21b2f41c1929d03dd9e9a03c436bf9338a8d882e0de8cb1bfb0b2d0ff02edac6, bytes=92752, lines=1025
+
+Benchmark: dot
+- aster: median 0.0891s  avg 0.0895s  min 0.0868s  stdev 0.0023s  runs 7
+  cpp: median 0.2809s  avg 0.2813s  min 0.2800s  stdev 0.0012s  runs 7
+ rust: median 0.2842s  avg 0.2827s  min 0.2746s  stdev 0.0045s  runs 7
+- perf delta (median): aster/baseline 0.317x
+
+
+Benchmark: gemm
+- aster: median 0.0032s  avg 0.0032s  min 0.0031s  stdev 0.0001s  runs 7
+  cpp: median 0.0117s  avg 0.0118s  min 0.0115s  stdev 0.0002s  runs 7
+ rust: median 0.0130s  avg 0.0131s  min 0.0129s  stdev 0.0002s  runs 7
+- perf delta (median): aster/baseline 0.271x
+
+
+Benchmark: stencil
+- aster: median 0.0381s  avg 0.0383s  min 0.0367s  stdev 0.0014s  runs 7
+  cpp: median 0.1104s  avg 0.1116s  min 0.1087s  stdev 0.0031s  runs 7
+ rust: median 0.1011s  avg 0.1020s  min 0.0993s  stdev 0.0024s  runs 7
+- perf delta (median): aster/baseline 0.377x
+
+
+Benchmark: sort
+- aster: median 0.0296s  avg 0.0297s  min 0.0295s  stdev 0.0002s  runs 7
+  cpp: median 0.1861s  avg 0.1863s  min 0.1847s  stdev 0.0013s  runs 7
+ rust: median 0.0484s  avg 0.0485s  min 0.0483s  stdev 0.0001s  runs 7
+- perf delta (median): aster/baseline 0.611x
+
+
+Benchmark: json
+- aster: median 0.0021s  avg 0.0021s  min 0.0019s  stdev 0.0002s  runs 7
+  cpp: median 0.0156s  avg 0.0157s  min 0.0154s  stdev 0.0002s  runs 7
+ rust: median 0.0151s  avg 0.0152s  min 0.0147s  stdev 0.0004s  runs 7
+- perf delta (median): aster/baseline 0.137x
+
+
+Benchmark: hashmap
+- aster: median 0.2392s  avg 0.2367s  min 0.2186s  stdev 0.0106s  runs 7
+  cpp: median 0.3404s  avg 0.3432s  min 0.3283s  stdev 0.0179s  runs 7
+ rust: median 0.3299s  avg 0.3322s  min 0.3260s  stdev 0.0081s  runs 7
+- perf delta (median): aster/baseline 0.725x
+
+
+Benchmark: regex
+- aster: median 0.0270s  avg 0.0269s  min 0.0265s  stdev 0.0002s  runs 7
+  cpp: median 0.0693s  avg 0.0694s  min 0.0683s  stdev 0.0008s  runs 7
+ rust: median 0.0698s  avg 0.0698s  min 0.0690s  stdev 0.0007s  runs 7
+- perf delta (median): aster/baseline 0.390x
+
+
+Benchmark: async_io
+- aster: median 0.0279s  avg 0.0280s  min 0.0273s  stdev 0.0007s  runs 7
+  cpp: median 0.0493s  avg 0.0493s  min 0.0484s  stdev 0.0006s  runs 7
+ rust: median 0.0481s  avg 0.0481s  min 0.0479s  stdev 0.0001s  runs 7
+- perf delta (median): aster/baseline 0.580x
+
+
+Benchmark: fswalk
+- aster: median 0.0799s  avg 0.0809s  min 0.0790s  stdev 0.0029s  runs 6
+  cpp: median 0.1938s  avg 0.1933s  min 0.1870s  stdev 0.0036s  runs 6
+ rust: median 0.1980s  avg 0.1993s  min 0.1901s  stdev 0.0094s  runs 6
+- perf delta (median): aster/baseline 0.412x
+
+
+Benchmark: treewalk
+- aster: median 0.0207s  avg 0.0205s  min 0.0197s  stdev 0.0006s  runs 6
+  cpp: median 0.1148s  avg 0.1151s  min 0.1113s  stdev 0.0027s  runs 6
+ rust: median 0.2505s  avg 0.2491s  min 0.2418s  stdev 0.0052s  runs 6
+- perf delta (median): aster/baseline 0.180x
+
+
+Benchmark: dircount
+- aster: median 0.0177s  avg 0.0180s  min 0.0173s  stdev 0.0007s  runs 6
+  cpp: median 0.0839s  avg 0.0827s  min 0.0744s  stdev 0.0070s  runs 6
+ rust: median 0.2523s  avg 0.4164s  min 0.2409s  stdev 0.2813s  runs 6
+- perf delta (median): aster/baseline 0.211x
+
+
+Benchmark: fsinventory
+- aster: median 0.0236s  avg 0.0234s  min 0.0212s  stdev 0.0015s  runs 6
+  cpp: median 0.1051s  avg 0.1067s  min 0.0962s  stdev 0.0095s  runs 6
+ rust: median 0.2667s  avg 0.2667s  min 0.2612s  stdev 0.0043s  runs 6
+- perf delta (median): aster/baseline 0.225x
+
+
+Geometric mean (aster/baseline): 0.328x
+Win rate (aster < baseline): 12/12 = 100.0%
+Margin >=5% faster (<=0.95x): 12/12 = 100.0%
+Margin >=15% faster (<=0.85x): 12/12 = 100.0%
+## Run 055 — section 6 domination + build timing (full suite, fsroot_huge, BENCH_ITERS=20)
+Command: `BENCH_BUILD_TIMING=1 BENCH_ITERS=20 FS_BENCH_ROOT='/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/fsroot_huge' FS_BENCH_LIST_FIXED=1 FS_BENCH_TREEWALK_LIST_FIXED=1 tools/bench/run.sh`
+Log: `/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/record/run_20260207_011723.txt`
+
+FS dataset:
+- FS_BENCH_ROOT: /Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/fsroot_huge
+- FS_BENCH_MAX_DEPTH: 6
+- fswalk_list: sha256=62653d093251de7decda76d583d445d7a8715b5ab79a3b4c689a002a21667098, bytes=9988983, lines=99332
+- treewalk_dirs: sha256=21b2f41c1929d03dd9e9a03c436bf9338a8d882e0de8cb1bfb0b2d0ff02edac6, bytes=92752, lines=1025
+
+Build timing: clean
+Build time (this build stage):
+- aster: 0.689s
+- cpp:   1.251s
+- rust:  1.505s
+
+Build timing: incremental (touch protocol)
+Build time (this build stage):
+- aster: 0.068s
+- cpp:   0.068s
+- rust:  0.123s
+
+Benchmark: dot
+- aster: median 0.0902s  avg 0.0913s  min 0.0890s  stdev 0.0031s  runs 7
+- cpp: median 0.2853s  avg 0.2859s  min 0.2769s  stdev 0.0060s  runs 7
+- rust: median 0.2822s  avg 0.2837s  min 0.2759s  stdev 0.0076s  runs 7
+- perf delta (median): aster/baseline 0.320x
+
+
+Benchmark: gemm
+- aster: median 0.0043s  avg 0.0043s  min 0.0038s  stdev 0.0004s  runs 7
+- cpp: median 0.0115s  avg 0.0115s  min 0.0111s  stdev 0.0003s  runs 7
+- rust: median 0.0140s  avg 0.0140s  min 0.0138s  stdev 0.0002s  runs 7
+- perf delta (median): aster/baseline 0.375x
+
+
+Benchmark: stencil
+- aster: median 0.0403s  avg 0.0412s  min 0.0366s  stdev 0.0036s  runs 7
+- cpp: median 0.1136s  avg 0.1128s  min 0.1101s  stdev 0.0017s  runs 7
+- rust: median 0.1025s  avg 0.1030s  min 0.1000s  stdev 0.0031s  runs 7
+- perf delta (median): aster/baseline 0.393x
+
+
+Benchmark: sort
+- aster: median 0.0310s  avg 0.0311s  min 0.0309s  stdev 0.0004s  runs 7
+- cpp: median 0.1852s  avg 0.1855s  min 0.1846s  stdev 0.0010s  runs 7
+- rust: median 0.0483s  avg 0.0484s  min 0.0480s  stdev 0.0004s  runs 7
+- perf delta (median): aster/baseline 0.643x
+
+
+Benchmark: json
+- aster: median 0.0020s  avg 0.0019s  min 0.0018s  stdev 0.0001s  runs 7
+- cpp: median 0.0152s  avg 0.0152s  min 0.0150s  stdev 0.0002s  runs 7
+- rust: median 0.0152s  avg 0.0152s  min 0.0148s  stdev 0.0004s  runs 7
+- perf delta (median): aster/baseline 0.129x
+
+
+Benchmark: hashmap
+- aster: median 0.2286s  avg 0.2340s  min 0.2212s  stdev 0.0118s  runs 7
+- cpp: median 0.3398s  avg 0.4963s  min 0.3296s  stdev 0.4145s  runs 7
+- rust: median 0.3439s  avg 0.3415s  min 0.3172s  stdev 0.0197s  runs 7
+- perf delta (median): aster/baseline 0.673x
+
+
+Benchmark: regex
+- aster: median 0.0266s  avg 0.0267s  min 0.0264s  stdev 0.0002s  runs 7
+- cpp: median 0.0697s  avg 0.0695s  min 0.0684s  stdev 0.0007s  runs 7
+- rust: median 0.0695s  avg 0.0695s  min 0.0686s  stdev 0.0007s  runs 7
+- perf delta (median): aster/baseline 0.382x
+
+
+Benchmark: async_io
+- aster: median 0.0267s  avg 0.0268s  min 0.0265s  stdev 0.0004s  runs 7
+- cpp: median 0.0470s  avg 0.0471s  min 0.0467s  stdev 0.0004s  runs 7
+- rust: median 0.0482s  avg 0.0482s  min 0.0475s  stdev 0.0006s  runs 7
+- perf delta (median): aster/baseline 0.568x
+
+
+Benchmark: fswalk
+- aster: median 0.0807s  avg 0.0820s  min 0.0779s  stdev 0.0040s  runs 6
+- cpp: median 0.1933s  avg 0.1929s  min 0.1832s  stdev 0.0076s  runs 6
+- rust: median 0.1972s  avg 0.1946s  min 0.1818s  stdev 0.0066s  runs 6
+- perf delta (median): aster/baseline 0.418x
+
+
+Benchmark: treewalk
+- aster: median 0.0221s  avg 0.0228s  min 0.0212s  stdev 0.0019s  runs 6
+- cpp: median 0.1046s  avg 0.1047s  min 0.0940s  stdev 0.0082s  runs 6
+- rust: median 0.2517s  avg 0.2510s  min 0.2412s  stdev 0.0076s  runs 6
+- perf delta (median): aster/baseline 0.211x
+
+
+Benchmark: dircount
+- aster: median 0.0186s  avg 0.0184s  min 0.0172s  stdev 0.0008s  runs 6
+- cpp: median 0.0763s  avg 0.0763s  min 0.0712s  stdev 0.0055s  runs 6
+- rust: median 0.2468s  avg 0.2456s  min 0.2307s  stdev 0.0085s  runs 6
+- perf delta (median): aster/baseline 0.244x
+
+
+Benchmark: fsinventory
+- aster: median 0.0213s  avg 0.0215s  min 0.0207s  stdev 0.0008s  runs 6
+- cpp: median 0.1077s  avg 0.1075s  min 0.0985s  stdev 0.0060s  runs 6
+- rust: median 0.2650s  avg 0.2635s  min 0.2499s  stdev 0.0080s  runs 6
+- perf delta (median): aster/baseline 0.198x
+
+
+Geometric mean (aster/baseline): 0.341x
+Win rate (aster < baseline): 12/12 = 100.0%
+Margin >=5% faster (<=0.95x): 12/12 = 100.0%
+Margin >=15% faster (<=0.85x): 12/12 = 100.0%
+Margin >=20% faster (<=0.80x): 12/12 = 100.0%

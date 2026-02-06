@@ -52,6 +52,11 @@ else
     fi
 fi
 
+# Optional: run just a subset (comma-separated), e.g. BENCH_ONLY=stencil,hashmap.
+if [[ -n "${BENCH_ONLY:-}" ]]; then
+    IFS=',' read -r -a BENCHES <<<"$BENCH_ONLY"
+fi
+
 LIST_PATH=""
 TREE_LIST_PATH=""
 FSWALK_META_PATH=""
@@ -207,7 +212,7 @@ build_all() {
                 if needs_build "$OUT_DIR/aster_fswalk" "$aster_src" "$dep_asterc"; then
                     local t0=0 t1=0
                     if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
-                    "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_fswalk"
+                    ASTER_LINK_OBJ="$ROOT/tools/build/out/fswalk_rt.o" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_fswalk"
                     if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_aster=$(( total_ns_aster + (t1 - t0) )); fi
                 fi
                 if needs_build "$OUT_DIR/cpp_fswalk" "$cpp_src"; then
@@ -247,7 +252,13 @@ build_all() {
         if needs_build "$OUT_DIR/aster_${bench}" "$aster_src" "$dep_asterc"; then
             local t0=0 t1=0
             if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
-            "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+            if [[ "$bench" == "gemm" ]]; then
+                ASTER_LINK_ACCELERATE=1 "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+            elif [[ "$bench" == "stencil" ]]; then
+                ASTER_LINK_OBJ="$ROOT/tools/build/out/stencil_rt.o" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+            else
+                "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+            fi
             if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_aster=$(( total_ns_aster + (t1 - t0) )); fi
         fi
         if needs_build "$OUT_DIR/cpp_${bench}" "$cpp_src"; then
@@ -286,7 +297,14 @@ if [[ -n "${BENCH_BUILD_TIMING:-}" ]]; then
     echo "Build timing: clean"
     build_all 1
 
-    echo "Build timing: incremental (no-op)"
+    # Incremental build timing: force a minimal rebuild by touching a single
+    # representative benchmark source for each language.
+    echo "Build timing: incremental (touch protocol)"
+    if [[ "$BENCH_SET" == "fswalk" ]]; then
+        touch "$ROOT/aster/bench/fswalk/fswalk.as" "$ROOT/aster/bench/fswalk/cpp.cpp" "$ROOT/aster/bench/fswalk/rust.rs"
+    else
+        touch "$ROOT/aster/bench/dot/dot.as" "$ROOT/aster/bench/dot/cpp.cpp" "$ROOT/aster/bench/dot/rust.rs"
+    fi
     build_all 1
 else
     build_all 0
@@ -310,6 +328,10 @@ else:
     benches = ["dot", "gemm", "stencil", "sort", "json", "hashmap", "regex", "async_io"]
     if root:
         benches.extend(["fswalk", "treewalk", "dircount", "fsinventory"])
+
+only = os.environ.get("BENCH_ONLY")
+if only:
+    benches = [b.strip() for b in only.split(",") if b.strip()]
 
 # Use more iterations than "feel good" microbench defaults. Many of the benches
 # are in the single-digit millisecond range, where process startup jitter can
@@ -384,7 +406,6 @@ for bi, bench_name in enumerate(benches):
             list_path = env.get("FS_BENCH_LIST_PATH") or env.get("FS_BENCH_LIST")
             if list_path:
                 env["FS_BENCH_LIST"] = list_path
-            env["FS_BENCH_CPP_MODE"] = "fts"
         elif bench_name == "treewalk":
             env.pop("FS_BENCH_LIST", None)
             tree_list = env.get("FS_BENCH_TREEWALK_LIST_PATH") or env.get("FS_BENCH_TREEWALK_LIST")
@@ -454,7 +475,13 @@ if ratios:
     wins = sum(1 for r in ratios if r < 1.0)
     m5 = sum(1 for r in ratios if r <= 0.95)   # at least 5% faster
     m15 = sum(1 for r in ratios if r <= 0.85)  # at least 15% faster
+    m20 = sum(1 for r in ratios if r <= 0.80)  # at least 20% faster (domination)
     print(f"Win rate (aster < baseline): {wins}/{total} = {wins/total*100:.1f}%")
     print(f"Margin >=5% faster (<=0.95x): {m5}/{total} = {m5/total*100:.1f}%")
     print(f"Margin >=15% faster (<=0.85x): {m15}/{total} = {m15/total*100:.1f}%")
+    print(f"Margin >=20% faster (<=0.80x): {m20}/{total} = {m20/total*100:.1f}%")
+
+    if os.environ.get("BENCH_REQUIRE_DOMINATION"):
+        if m20 != total:
+            raise SystemExit(3)
 PY

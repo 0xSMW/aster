@@ -70,6 +70,10 @@ extern def fts_close(ftsp is ptr of FTS) returns i32
 extern def fts_set(ftsp is ptr of FTS, ent is ptr of FTSENT, instr is i32) returns i32
 extern def clock_gettime(clk_id is i32, ts is mut ref TimeSpec) returns i32
 
+# Multithreaded FS helpers (linked into the bench binary via ASTER_LINK_OBJ).
+extern def aster_fswalk_list_mt(list_path is String, files is mut ref u64, dirs is mut ref u64, bytes is mut ref u64, follow is i32, count_only is i32, inventory is i32, links is mut ref u64, name_bytes is mut ref u64, name_hash is mut ref u64) returns i32
+extern def aster_treewalk_list_bulk_mt(list_path is String, files is mut ref u64, dirs is mut ref u64, bytes is mut ref u64, follow is i32, count_only is i32, inventory is i32, links is mut ref u64, name_bytes is mut ref u64, name_hash is mut ref u64) returns i32
+
 
 def hash_name(hash is mut ref u64, name is String) returns usize
     var i is usize = 0
@@ -691,10 +695,10 @@ def main(argc is i32, argv is ptr of MutString) returns i32
     prof.n_open = 0
 
     if list_path is not null then
-        if fswalk_list(list_path, &files, &dirs, &bytes, follow, count_only, inventory, &links, &name_bytes, &name_hash, &prof) != 0 then
+        if aster_fswalk_list_mt(list_path, &files, &dirs, &bytes, follow, count_only, inventory, &links, &name_bytes, &name_hash) != 0 then
             return 2
     else if tree_list is not null then
-        if treewalk_list(tree_list, &files, &dirs, &bytes, follow, count_only, inventory, &links, &name_bytes, &name_hash, &prof) != 0 then
+        if aster_treewalk_list_bulk_mt(tree_list, &files, &dirs, &bytes, follow, count_only, inventory, &links, &name_bytes, &name_hash) != 0 then
             return 2
     else
         var max_depth is i32 = env_int("FS_BENCH_MAX_DEPTH", DEFAULT_MAX_DEPTH)

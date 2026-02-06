@@ -39,8 +39,11 @@ tools/bench/run.sh
 
 Useful knobs:
 - `FS_BENCH_LIST_MAX_LINES`, `FS_BENCH_TREEWALK_LIST_MAX_LINES`: cap list size.
+- `FS_BENCH_THREADS`: threads for Aster fswalk/treewalk helpers (default: up to 8).
 - `FS_BENCH_TREEWALK_MODE`: `bulk` (getattrlistbulk) or `fts`.
 - `FS_BENCH_CPP_MODE`: force C++ mode (`fts` or `bulk`) for apples-to-apples.
+- `BENCH_ITERS`: scale kernel work factors for more stable signals.
+- `BENCH_REQUIRE_DOMINATION=1`: fail the run if any benchmark is slower than `0.80x` the best baseline.
 
 ## Recording Runs
 

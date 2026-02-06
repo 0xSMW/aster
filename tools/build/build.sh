@@ -18,7 +18,7 @@ COMPILER_SRC=("$ROOT/asm/compiler/"*.S "$ROOT/asm/compiler/"*.c)
 OBJ_FILES=()
 for file in "${RUNTIME_SRC[@]}" "${COMPILER_SRC[@]}" "$SRC"; do
     obj="$OUT_DIR/$(basename "${file%.*}").o"
-    clang -c "$file" -I"$ROOT/asm/macros" -o "$obj"
+    clang -c "$file" -O3 -I"$ROOT/asm/macros" -o "$obj"
     OBJ_FILES+=("$obj")
 done
 

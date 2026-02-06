@@ -1674,6 +1674,28 @@ static Value parse_postfix(FuncCtx* f, size_t* io_i, Value base) {
         base = (Value){.type = elem, .is_lvalue = true, .kind = ptr.kind, .v = ptr.v};
         continue;
       }
+      if (elem->kind == TY_STRUCT && elem->sdef) {
+        // Struct elements are byte-addressed in this MVP. Use i8 GEP with
+        // explicit scaling by struct size, otherwise we'd incorrectly scale by
+        // pointer size (because llvm_ty(TY_STRUCT) == "ptr").
+        int ts = new_temp(f);
+        fprintf(c->out, "  ");
+        emit_ssa(c->out, 't', ts);
+        fprintf(c->out, " = mul i64 ");
+        emit_value(c->out, idxv);
+        fprintf(c->out, ", %zu\n", elem->sdef->size);
+
+        int t = new_temp(f);
+        fprintf(c->out, "  ");
+        emit_ssa(c->out, 't', t);
+        fprintf(c->out, " = getelementptr inbounds i8, ptr ");
+        emit_value(c->out, ptr);
+        fprintf(c->out, ", i64 ");
+        emit_ssa(c->out, 't', ts);
+        fprintf(c->out, "\n");
+        base = (Value){.type = elem, .is_lvalue = true, .kind = V_SSA_TEMP, .v.id = t};
+        continue;
+      }
       int t = new_temp(f);
       fprintf(c->out, "  ");
       emit_ssa(c->out, 't', t);
@@ -2270,6 +2292,14 @@ static void compile_stmt_list(FuncCtx* f, size_t* io_i, size_t end) {
       i++;
       continue;
     }
+    // If the prior statement terminated the current block (return/break/continue),
+    // start a fresh (possibly unreachable) basic block so any following statements
+    // still produce valid LLVM IR.
+    if (f->terminated) {
+      int lbl = new_label(f);
+      fprintf(c->out, "bb%d:\n", lbl);
+      f->terminated = false;
+    }
     uint32_t k = c->toks[i].kind;
     if (k == TOK_KW_VAR || k == TOK_KW_LET) {
       size_t kw_i = i;
@@ -2394,6 +2424,16 @@ static void emit_extern_decl(Compiler* c, FuncDef* f) {
     fprintf(c->out, "declare %s @printf(ptr, ...)\n", llvm_ty(f->ret));
     return;
   }
+  // Provide aliasing info for common allocators so clang can optimize Aster IR
+  // similarly to C/C++ frontends (e.g., recognize distinct malloc results).
+  if (f->ret && f->ret->kind == TY_PTR && str_eq(f->name, f->name_len, "malloc") && f->param_count == 1) {
+    fprintf(c->out, "declare noalias %s @malloc(%s)\n", llvm_ty(f->ret), llvm_ty(f->params[0].type));
+    return;
+  }
+  if (f->ret && f->ret->kind == TY_PTR && str_eq(f->name, f->name_len, "calloc") && f->param_count == 2) {
+    fprintf(c->out, "declare noalias %s @calloc(%s, %s)\n", llvm_ty(f->ret), llvm_ty(f->params[0].type), llvm_ty(f->params[1].type));
+    return;
+  }
   fprintf(c->out, "declare %s @%.*s(", llvm_ty(f->ret), (int)f->name_len, f->name);
   for (size_t i = 0; i < f->param_count; i++) {
     if (i) fprintf(c->out, ", ");
@@ -2508,8 +2548,17 @@ int asterc1__compile_real(uint8_t* src, size_t len, FILE* out) {
   // emit module
   fprintf(out, "; ModuleID = 'aster'\nsource_filename = \"aster\"\n\n");
   // builtins (bench code calls these without extern decls)
-  fprintf(out, "declare ptr @calloc(i64, i64)\n");
-  fprintf(out, "declare ptr @memcpy(ptr, ptr, i64)\n\n");
+  bool have_calloc = false;
+  bool have_memcpy = false;
+  for (size_t i = 0; i < c.nfuncs; i++) {
+    FuncDef* f = c.funcs[i];
+    if (!f->is_extern) continue;
+    if (str_eq(f->name, f->name_len, "calloc")) have_calloc = true;
+    if (str_eq(f->name, f->name_len, "memcpy")) have_memcpy = true;
+  }
+  if (!have_calloc) fprintf(out, "declare noalias ptr @calloc(i64, i64)\n");
+  if (!have_memcpy) fprintf(out, "declare ptr @memcpy(ptr, ptr, i64)\n");
+  fprintf(out, "\n");
 
   for (size_t i = 0; i < c.nfuncs; i++) {
     if (c.funcs[i]->is_extern) emit_extern_decl(&c, c.funcs[i]);

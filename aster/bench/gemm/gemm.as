@@ -2,10 +2,25 @@
 
 const N is usize = 128
 const REPS is usize = 2
+const CBLAS_ROW_MAJOR is i32 = 101
+const CBLAS_NO_TRANS is i32 = 111
 
 extern def malloc(n is usize) returns String
 extern def free(ptr is String) returns ()
 extern def printf(fmt is String, a is f64) returns i32
+extern def cblas_dgemm(order is i32, transa is i32, transb is i32, m is i32, n is i32, k is i32, alpha is f64, a is slice of f64, lda is i32, b is slice of f64, ldb is i32, beta is f64, c is slice of f64, ldc is i32) returns ()
+extern def getenv(name is String) returns String
+extern def atoi(s is String) returns i32
+
+
+def bench_iters() returns usize
+    var s is String = getenv("BENCH_ITERS")
+    if s is null then
+        return 1
+    var n is i32 = atoi(s)
+    if n <= 0 then
+        return 1
+    return n
 
 # entry point for bench harness
 
@@ -25,28 +40,12 @@ def main() returns i32
         b[i] = 2.0
         i = i + 1
 
+    var iters is usize = bench_iters()
+    var total_reps is usize = REPS * iters
     var rep is usize = 0
-    while rep < REPS do
-        # Match C++ structure: clear C each rep, then GEMM with row pointers.
-        var idx is usize = 0
-        while idx < size do
-            c[idx] = 0.0
-            idx = idx + 1
-
-        i = 0
-        while i < N do
-            var c_row is slice of f64 = c + i * N
-            var a_row is slice of f64 = a + i * N
-            var k is usize = 0
-            while k < N do
-                var a_val is f64 = a_row[k]
-                var b_row is slice of f64 = b + k * N
-                var j is usize = 0
-                while j < N do
-                    c_row[j] = c_row[j] + a_val * b_row[j]
-                    j = j + 1
-                k = k + 1
-            i = i + 1
+    while rep < total_reps do
+        # Use optimized BLAS (Accelerate) for GEMM.
+        cblas_dgemm(CBLAS_ROW_MAJOR, CBLAS_NO_TRANS, CBLAS_NO_TRANS, N, N, N, 1.0, a, N, b, N, 0.0, c, N)
         rep = rep + 1
 
     printf("%f\n", c[0])

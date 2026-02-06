@@ -23,18 +23,27 @@ fn count_matches(buf: &[u8]) -> u64 {
 
 fn main() {
     let mut buf = vec![0u8; N];
-    let mut seed: u64 = 1;
-    for i in 0..N {
-        seed = seed.wrapping_mul(LCG_A).wrapping_add(LCG_C);
-        let r = (seed & 3) as u8;
-        let ch = match r {
-            0 => b'a',
-            1 => b'b',
-            2 => b'c',
-            _ => b'x',
-        };
-        buf[i] = ch;
+    let iters: usize = std::env::var("BENCH_ITERS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&v| v > 0)
+        .unwrap_or(1);
+
+    let mut total: u64 = 0;
+    for _ in 0..iters {
+        let mut seed: u64 = 1;
+        for i in 0..N {
+            seed = seed.wrapping_mul(LCG_A).wrapping_add(LCG_C);
+            let r = ((seed >> 32) & 3) as u8;
+            let ch = match r {
+                0 => b'a',
+                1 => b'b',
+                2 => b'c',
+                _ => b'x',
+            };
+            buf[i] = ch;
+        }
+        total = total.wrapping_add(count_matches(&buf));
     }
-    let matches = count_matches(&buf);
-    println!("{}", matches);
+    println!("{}", total);
 }

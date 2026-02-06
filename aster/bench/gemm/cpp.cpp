@@ -1,9 +1,18 @@
 #include <cstdio>
 #include <cstdlib>
 
+static size_t bench_iters() {
+    const char* s = std::getenv("BENCH_ITERS");
+    if (!s || !*s) return 1;
+    long v = std::strtol(s, nullptr, 10);
+    if (v <= 0) return 1;
+    return static_cast<size_t>(v);
+}
+
 int main() {
     const size_t N = 128;
     const int REPS = 2;
+    const size_t total_reps = static_cast<size_t>(REPS) * bench_iters();
     const size_t total = N * N;
     double* a = static_cast<double*>(std::malloc(total * sizeof(double)));
     double* b = static_cast<double*>(std::malloc(total * sizeof(double)));
@@ -16,7 +25,7 @@ int main() {
         c[i] = 0.0;
     }
 
-    for (int r = 0; r < REPS; ++r) {
+    for (size_t r = 0; r < total_reps; ++r) {
         for (size_t i = 0; i < total; ++i) c[i] = 0.0;
         for (size_t i = 0; i < N; ++i) {
             double* c_row = c + i * N;

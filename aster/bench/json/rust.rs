@@ -36,8 +36,14 @@ fn parse_one(bytes: &[u8]) -> u64 {
 
 fn main() {
     let bytes = JSON_TEXT.as_bytes();
+    let iters: usize = std::env::var("BENCH_ITERS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&v| v > 0)
+        .unwrap_or(1);
+    let total_reps = REPS * iters;
     let mut total: u64 = 0;
-    for _ in 0..REPS {
+    for _ in 0..total_reps {
         total += parse_one(bytes);
     }
     println!("{}", total);

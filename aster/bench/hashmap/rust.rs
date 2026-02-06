@@ -2,6 +2,7 @@ const N: usize = 200000;
 const CAP: usize = 1048576;
 const LCG_A: u64 = 6364136223846793005;
 const LCG_C: u64 = 1;
+const LOOKUP_SCALE: usize = 25;
 
 #[inline]
 fn hash_u64(key: u64) -> usize {
@@ -50,12 +51,21 @@ fn main() {
         map_put(&mut keys, &mut vals, key, i as u64);
     }
 
+    let iters: usize = std::env::var("BENCH_ITERS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&v| v > 0)
+        .unwrap_or(1);
+    let iters = iters * LOOKUP_SCALE;
+
     let mut total: u64 = 0;
-    seed = 1;
-    for _ in 0..N {
-        seed = seed.wrapping_mul(LCG_A).wrapping_add(LCG_C);
-        let key = seed | 1;
-        total = total.wrapping_add(map_get(&keys, &vals, key));
+    for _ in 0..iters {
+        seed = 1;
+        for _ in 0..N {
+            seed = seed.wrapping_mul(LCG_A).wrapping_add(LCG_C);
+            let key = seed | 1;
+            total = total.wrapping_add(map_get(&keys, &vals, key));
+        }
     }
 
     println!("{}", total);

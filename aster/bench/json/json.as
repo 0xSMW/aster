@@ -5,6 +5,18 @@ const JSON_TEXT is String = "{\"id\":123,\"name\":\"alpha\",\"val\":456,\"flag\"
 
 extern def strlen(s is String) returns usize
 extern def printf(fmt is String, a is u64) returns i32
+extern def getenv(name is String) returns String
+extern def atoi(s is String) returns i32
+
+
+def bench_iters() returns usize
+    var s is String = getenv("BENCH_ITERS")
+    if s is null then
+        return 1
+    var n is i32 = atoi(s)
+    if n <= 0 then
+        return 1
+    return n
 
 # parse a single JSON object string and accumulate digits/strings
 
@@ -77,9 +89,11 @@ def parse_one(s is String, len is usize) returns u64
 
 def main() returns i32
     var len is usize = strlen(JSON_TEXT)
+    var iters is usize = bench_iters()
+    var total_reps is usize = REPS * iters
     var rep is usize = 0
     var total is u64 = 0
-    while rep < REPS do
+    while rep < total_reps do
         total = total + parse_one(JSON_TEXT, len)
         rep = rep + 1
     printf("%llu\n", total)

@@ -1,9 +1,18 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 static constexpr size_t REPS = 20000;
 static const char* JSON_TEXT = "{\"id\":123,\"name\":\"alpha\",\"val\":456,\"flag\":true}";
+
+static size_t bench_iters() {
+    const char* s = std::getenv("BENCH_ITERS");
+    if (!s || !*s) return 1;
+    long v = std::strtol(s, nullptr, 10);
+    if (v <= 0) return 1;
+    return static_cast<size_t>(v);
+}
 
 static uint64_t parse_one(const char* s, size_t len) {
     uint64_t sum = 0;
@@ -37,7 +46,8 @@ static uint64_t parse_one(const char* s, size_t len) {
 int main() {
     size_t len = std::strlen(JSON_TEXT);
     uint64_t total = 0;
-    for (size_t r = 0; r < REPS; r++) {
+    const size_t total_reps = REPS * bench_iters();
+    for (size_t r = 0; r < total_reps; r++) {
         total += parse_one(JSON_TEXT, len);
     }
     std::printf("%llu\n", static_cast<unsigned long long>(total));

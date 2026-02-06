@@ -20,6 +20,13 @@ extern "C" {
 }
 
 fn main() {
+    let iters: usize = std::env::var("BENCH_ITERS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&v| v > 0)
+        .unwrap_or(1);
+    let total_iters = ITERS * iters;
+
     let mut fds = [0i32; 2];
     unsafe {
         if pipe(fds.as_mut_ptr()) != 0 {
@@ -32,7 +39,7 @@ fn main() {
     let mut buf = vec![b'a'; CHUNK];
     let mut total: u64 = 0;
 
-    for _ in 0..ITERS {
+    for _ in 0..total_iters {
         unsafe {
             let _ = write(wfd, buf.as_ptr(), CHUNK);
             let mut pfd = PollFd { fd: rfd, events: POLLIN, revents: 0 };

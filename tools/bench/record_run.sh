@@ -31,7 +31,7 @@ title = sys.argv[5]
 
 bench_md = root / "BENCH.md"
 bench_text = bench_md.read_text(encoding="utf-8")
-m = re.findall(r"^## Run (\\d+)", bench_text, flags=re.M)
+m = re.findall(r"^## Run (\d+)", bench_text, flags=re.M)
 run_no = (max(int(x) for x in m) + 1) if m else 1
 
 log = log_txt.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -63,7 +63,7 @@ for line in log:
         copy = True
     if copy:
         # Make compiler output markdown-friendly by bulleting the language timing lines.
-        if re.match(r"^(aster:|\\s+cpp:|\\s*rust:)", line):
+        if re.match(r"^(aster:|\s+cpp:|\s*rust:)", line):
             out.append(f"- {line.strip()}")
         elif line.startswith("perf delta (median):"):
             out.append(f"- {line.strip()}")
