@@ -1669,10 +1669,15 @@ static Value parse_postfix(FuncCtx* f, size_t* io_i, Value base) {
       }
       Type* elem = base.type->pointee ? base.type->pointee : ty_u8();
       Value ptr = load_if_needed(f, base);
+      // Fast-path: `p[0]` is just `*p` (no GEP needed).
+      if (idxv.kind == V_CONST_INT && idxv.v.u == 0) {
+        base = (Value){.type = elem, .is_lvalue = true, .kind = ptr.kind, .v = ptr.v};
+        continue;
+      }
       int t = new_temp(f);
       fprintf(c->out, "  ");
       emit_ssa(c->out, 't', t);
-      fprintf(c->out, " = getelementptr %s, ptr ", llvm_ty(elem));
+      fprintf(c->out, " = getelementptr inbounds %s, ptr ", llvm_ty(elem));
       emit_value(c->out, ptr);
       fprintf(c->out, ", i64 ");
       emit_value(c->out, idxv);
@@ -1705,7 +1710,7 @@ static Value parse_postfix(FuncCtx* f, size_t* io_i, Value base) {
       int t = new_temp(f);
       fprintf(c->out, "  ");
       emit_ssa(c->out, 't', t);
-      fprintf(c->out, " = getelementptr i8, ptr ");
+      fprintf(c->out, " = getelementptr inbounds i8, ptr ");
       Value ptr = base;
       ptr.is_lvalue = false;
       emit_value(c->out, ptr);
@@ -1731,7 +1736,9 @@ static Value parse_unary(FuncCtx* f, size_t* io_i) {
     fprintf(c->out, "  ");
     emit_ssa(c->out, 't', t);
     if (v.type->kind == TY_FLOAT) {
-      fprintf(c->out, " = fneg %s ", llvm_ty(v.type));
+      // Match clang's default `-ffp-contract=on` behavior by allowing
+      // contraction (e.g. fmul+fadd -> fma) without enabling full fast-math.
+      fprintf(c->out, " = fneg contract %s ", llvm_ty(v.type));
       emit_value(c->out, v);
       fprintf(c->out, "\n");
       *io_i = i;
@@ -1814,13 +1821,74 @@ static Value emit_binop(FuncCtx* f, uint32_t op, Value a, Value b) {
   const char* aty = llvm_ty(a.type);
 
   if (op == TOK_PLUS || op == TOK_MINUS || op == TOK_STAR || op == TOK_SLASH) {
+    // Pointer difference: ptr - ptr -> isize (ptrdiff_t), in units of the pointee type.
+    if (op == TOK_MINUS && a.type->kind == TY_PTR && b.type->kind == TY_PTR) {
+      Type* aelem = a.type->pointee ? a.type->pointee : ty_u8();
+      Type* belem = b.type->pointee ? b.type->pointee : ty_u8();
+      if (aelem != belem) {
+        error_generic(f, "pointer subtraction requires matching element types");
+        return (Value){.type = ty_isize(), .kind = V_CONST_INT, .v.u = 0};
+      }
+      size_t elem_sz = ty_size(aelem);
+      if (elem_sz == 0) elem_sz = 1;
+
+      Value ap = load_if_needed(f, a);
+      Value bp = load_if_needed(f, b);
+
+      int ta = new_temp(f);
+      fprintf(c->out, "  ");
+      emit_ssa(c->out, 't', ta);
+      fprintf(c->out, " = ptrtoint ptr ");
+      emit_value(c->out, ap);
+      fprintf(c->out, " to i64\n");
+
+      int tb = new_temp(f);
+      fprintf(c->out, "  ");
+      emit_ssa(c->out, 't', tb);
+      fprintf(c->out, " = ptrtoint ptr ");
+      emit_value(c->out, bp);
+      fprintf(c->out, " to i64\n");
+
+      int td = new_temp(f);
+      fprintf(c->out, "  ");
+      emit_ssa(c->out, 't', td);
+      fprintf(c->out, " = sub i64 ");
+      emit_ssa(c->out, 't', ta);
+      fprintf(c->out, ", ");
+      emit_ssa(c->out, 't', tb);
+      fprintf(c->out, "\n");
+
+      if (elem_sz == 1) {
+        return (Value){.type = ty_isize(), .kind = V_SSA_TEMP, .v.id = td};
+      }
+
+      int te = new_temp(f);
+      fprintf(c->out, "  ");
+      emit_ssa(c->out, 't', te);
+      fprintf(c->out, " = sdiv i64 ");
+      emit_ssa(c->out, 't', td);
+      fprintf(c->out, ", %zu\n", elem_sz);
+      return (Value){.type = ty_isize(), .kind = V_SSA_TEMP, .v.id = te};
+    }
+
     if (a.type->kind == TY_PTR && b.type->kind == TY_INT && (op == TOK_PLUS || op == TOK_MINUS)) {
       Type* elem = a.type->pointee ? a.type->pointee : ty_u8();
       Value idx = cast_to(f, ty_i64(), b);
+      if (op == TOK_MINUS) {
+        // ptr - n == ptr + (-n)
+        idx = load_if_needed(f, idx);
+        int nt = new_temp(f);
+        fprintf(c->out, "  ");
+        emit_ssa(c->out, 't', nt);
+        fprintf(c->out, " = sub i64 0, ");
+        emit_value(c->out, idx);
+        fprintf(c->out, "\n");
+        idx = (Value){.type = ty_i64(), .kind = V_SSA_TEMP, .v.id = nt};
+      }
       int t = new_temp(f);
       fprintf(c->out, "  ");
       emit_ssa(c->out, 't', t);
-      fprintf(c->out, " = getelementptr %s, ptr ", llvm_ty(elem));
+      fprintf(c->out, " = getelementptr inbounds %s, ptr ", llvm_ty(elem));
       emit_value(c->out, a);
       fprintf(c->out, ", i64 ");
       emit_value(c->out, idx);
@@ -1836,7 +1904,11 @@ static Value emit_binop(FuncCtx* f, uint32_t op, Value a, Value b) {
     int t = new_temp(f);
     fprintf(c->out, "  ");
     emit_ssa(c->out, 't', t);
-    fprintf(c->out, " = %s %s ", opstr, aty);
+    if (a.type->kind == TY_FLOAT) {
+      fprintf(c->out, " = %s contract %s ", opstr, aty);
+    } else {
+      fprintf(c->out, " = %s %s ", opstr, aty);
+    }
     emit_value(c->out, a);
     fprintf(c->out, ", ");
     emit_value(c->out, b);

@@ -311,8 +311,11 @@ else:
     if root:
         benches.extend(["fswalk", "treewalk", "dircount", "fsinventory"])
 
-RUNS = 6
-WARMUP = 1
+# Use more iterations than "feel good" microbench defaults. Many of the benches
+# are in the single-digit millisecond range, where process startup jitter can
+# materially move the median. Extra runs + warmup reduces volatility.
+RUNS = 9
+WARMUP = 2
 
 def _env_int(*keys: str, default: int) -> int:
     for k in keys:
@@ -321,8 +324,8 @@ def _env_int(*keys: str, default: int) -> int:
             return int(v)
     return default
 
-FSWALK_RUNS = _env_int("FS_BENCH_IO_RUNS", "FS_BENCH_FSWALK_RUNS", default=3)
-FSWALK_WARMUP = _env_int("FS_BENCH_IO_WARMUP", "FS_BENCH_FSWALK_WARMUP", default=0)
+FSWALK_RUNS = _env_int("FS_BENCH_IO_RUNS", "FS_BENCH_FSWALK_RUNS", default=7)
+FSWALK_WARMUP = _env_int("FS_BENCH_IO_WARMUP", "FS_BENCH_FSWALK_WARMUP", default=1)
 
 bins = {
     "aster": os.path.join(os.environ.get("BENCH_OUT_DIR", "./tools/bench/out"), "aster_{}"),
@@ -345,8 +348,9 @@ def stdev(values):
 
 results = {}
 ratios = []
+lang_keys = ["aster", "cpp", "rust"]
 
-for bench_name in benches:
+for bi, bench_name in enumerate(benches):
     results[bench_name] = {}
     args = []
     if bench_name == "fswalk":
@@ -369,7 +373,12 @@ for bench_name in benches:
         runs = RUNS
         warmup = WARMUP
 
-    for lang, tpl in bins.items():
+    # Rotate the per-benchmark execution order to avoid systematic "first one
+    # pays cold-start" bias against a single language.
+    rot = bi % len(lang_keys)
+    lang_order = lang_keys[rot:] + lang_keys[:rot]
+    for lang in lang_order:
+        tpl = bins[lang]
         env = os.environ.copy()
         if bench_name == "fswalk":
             list_path = env.get("FS_BENCH_LIST_PATH") or env.get("FS_BENCH_LIST")

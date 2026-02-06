@@ -119,6 +119,9 @@ Pointer-like:
 - Comparison: `< <= > >= == !=`, pointer equality via `is` / `is not`
 - Boolean: `and`, `or`, unary `not` (short-circuit in conditions)
 - Unary: `-expr`, `&lvalue`, `*ptr`
+- Pointer arithmetic:
+  - `ptr + n` / `ptr - n` (element-indexed; unchecked)
+  - `ptr - ptr` (returns `isize` element distance; requires matching element types)
 - Call: `f(a, b, c)`
 - Indexing: `ptr[i]`
 - Field access: `struct_lvalue.field`
@@ -131,6 +134,10 @@ Pointer-like:
 2. Parse + typecheck (Aster1 rules)
 3. Emit LLVM IR (`.ll`)
 4. Invoke `clang -O3` to produce the executable
+
+Notes:
+- Pointer arithmetic and indexing are lowered as unchecked raw pointer operations. Out-of-bounds pointer math/deref is undefined behavior (for optimization).
+- Floating point binops are emitted with LLVM `contract` fast-math flags to allow FMA contraction (matching clang's default `-ffp-contract=on` behavior).
 
 ## Tests
 

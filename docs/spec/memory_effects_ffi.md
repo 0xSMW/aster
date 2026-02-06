@@ -42,8 +42,10 @@ happen):
   shifts, casts, and formatting, but not the underlying bit pattern.
 - Shifts are defined for shift counts in-range (`0 <= n < bit_width`). Shifting
   by an out-of-range amount is UB.
-- Floating point uses IEEE-754 semantics for the underlying hardware unless an
-  explicit fast-math mode is enabled by the compiler profile.
+- Floating point uses IEEE-754 semantics for the underlying hardware. In Aster1,
+  the compiler enables *contraction* (FMA) by default (LLVM `contract` flags),
+  but does not enable full "fast-math" reassociation unless explicitly opted-in
+  by a compiler profile.
 
 ### Aliasing (Borrowing)
 
@@ -130,4 +132,3 @@ they lower to `...` in LLVM IR/ABI. Example: `printf`.
 This spec is paired with:
 - `docs/spec/aster1.md` for the current MVP subset,
 - `INIT.md` Section 4 for the staged implementation plan.
-

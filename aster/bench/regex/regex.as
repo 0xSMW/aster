@@ -3,6 +3,7 @@
 const N is usize = 1000000
 const LCG_A is u64 = 6364136223846793005
 const LCG_C is u64 = 1
+const LUT_PACK is u64 = 0x78636261  # bytes: 'a','b','c','x' (little-endian)
 
 extern def malloc(n is usize) returns String
 extern def free(ptr is String) returns ()
@@ -15,14 +16,13 @@ def count_matches(buf is String, len is usize) returns u64
     var p is String = buf
     var end is String = buf + len
     while p < end do
-        var c is u8 = p[0]
-        if c != 97 then
+        if p[0] != 'a' then
             p = p + 1
             continue
         var q is String = p + 1
-        while q < end and q[0] == 98 do
+        while q < end and q[0] == 'b' do
             q = q + 1
-        if q < end and q[0] == 99 then
+        if q < end and q[0] == 'c' then
             count = count + 1
             p = q + 1
         else
@@ -40,15 +40,9 @@ def main() returns i32
     var i is usize = 0
     while i < N do
         seed = seed * LCG_A + LCG_C
-        var r is u8 = seed & 3
-        var ch is u8 = 120
-        if r == 0 then
-            ch = 97
-        else if r == 1 then
-            ch = 98
-        else if r == 2 then
-            ch = 99
-        buf[i] = ch
+        var r is u64 = seed & 3
+        var shift is u64 = r << 3
+        buf[i] = (LUT_PACK >> shift) & 255
         i = i + 1
 
     var matches is u64 = count_matches(buf, N)
