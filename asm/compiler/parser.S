@@ -40,11 +40,6 @@ FUNC_END aster_parse__sum_two_ints
 .equ PARSE_OFF_SRC, 592
 .equ PARSE_OFF_LEN, 600
 .equ PARSE_OFF_OK, 608
-.equ PARSE_OFF_TMP_EXPR, 616
-.equ PARSE_OFF_OP_EXPR, 624
-.equ PARSE_OFF_TMP_TERM, 632
-.equ PARSE_OFF_OP_TERM, 640
-.equ PARSE_OFF_TMP_PAREN, 648
 .equ PARSE_FRAME_SIZE, 672
 
 FUNC_BEGIN aster_parse__eval_expr
@@ -60,8 +55,10 @@ FUNC_BEGIN aster_parse__eval_expr
     ldr x2, [sp, #PARSE_OFF_LEN]
     bl _aster_lex__init
 
-    bl .Lnext_token
-    bl .Lparse_expr
+    mov x0, sp
+    bl _aster_parse__eval_expr__next_token
+    mov x0, sp
+    bl _aster_parse__eval_expr__parse_expr
 
     ldr x1, [sp, #PARSE_OFF_OK]
     cbz x1, .Lparse_fail_expr
@@ -76,140 +73,191 @@ FUNC_BEGIN aster_parse__eval_expr
     FRAME_LEAVE PARSE_FRAME_SIZE
 FUNC_END aster_parse__eval_expr
 
-.Lnext_token:
-    add x0, sp, #PARSE_OFF_LEX
-    add x1, sp, #PARSE_OFF_TOK
+// Internal helpers for eval_expr. The old implementation used local labels as
+// subroutines; on arm64 `bl` clobbers LR (x30), so nested calls never returned
+// and `parser_expr` would hang.
+
+FUNC_BEGIN aster_parse__eval_expr__next_token
+    FRAME_ENTER 16
+    str x19, [sp, #0]
+    mov x19, x0
+
+.Lnext_tok_loop:
+    add x0, x19, #PARSE_OFF_LEX
+    add x1, x19, #PARSE_OFF_TOK
     bl _aster_lex__next
-    ldr w2, [sp, #PARSE_OFF_TOK + TOK_KIND]
+    ldr w2, [x19, #PARSE_OFF_TOK + TOK_KIND]
     cmp w2, #TOK_NEWLINE
-    b.eq .Lnext_token
+    b.eq .Lnext_tok_loop
     cmp w2, #TOK_INDENT
-    b.eq .Lnext_token
+    b.eq .Lnext_tok_loop
     cmp w2, #TOK_DEDENT
-    b.eq .Lnext_token
-    ret
+    b.eq .Lnext_tok_loop
+    mov w0, w2
 
-.Lparse_expr:
-    bl .Lparse_term
-    ldr x1, [sp, #PARSE_OFF_OK]
-    cbz x1, .Lparse_expr_done
-    str x0, [sp, #PARSE_OFF_TMP_EXPR]
-.Lexpr_loop:
-    ldr w2, [sp, #PARSE_OFF_TOK + TOK_KIND]
+    ldr x19, [sp, #0]
+    FRAME_LEAVE 16
+FUNC_END aster_parse__eval_expr__next_token
+
+FUNC_BEGIN aster_parse__eval_expr__parse_expr
+    FRAME_ENTER 32
+    str x19, [sp, #0]
+    mov x19, x0
+
+    mov x0, x19
+    bl _aster_parse__eval_expr__parse_term
+    ldr x1, [x19, #PARSE_OFF_OK]
+    cbz x1, .Lexpr_ret
+    str x0, [sp, #16] // acc
+
+.Lexpr_loop2:
+    ldr w2, [x19, #PARSE_OFF_TOK + TOK_KIND]
     cmp w2, #TOK_PLUS
-    b.eq .Lexpr_op
+    b.eq .Lexpr_op2
     cmp w2, #TOK_MINUS
-    b.ne .Lexpr_done
-.Lexpr_op:
-    str w2, [sp, #PARSE_OFF_OP_EXPR]
-    bl .Lnext_token
-    bl .Lparse_term
-    ldr x1, [sp, #PARSE_OFF_OK]
-    cbz x1, .Lexpr_done
-    ldr x3, [sp, #PARSE_OFF_TMP_EXPR]
-    ldr w2, [sp, #PARSE_OFF_OP_EXPR]
+    b.ne .Lexpr_done2
+.Lexpr_op2:
+    str w2, [sp, #24] // op
+    mov x0, x19
+    bl _aster_parse__eval_expr__next_token
+    mov x0, x19
+    bl _aster_parse__eval_expr__parse_term
+    ldr x1, [x19, #PARSE_OFF_OK]
+    cbz x1, .Lexpr_done2
+    ldr x3, [sp, #16]
+    ldr w2, [sp, #24]
     cmp w2, #TOK_PLUS
-    b.eq .Lexpr_add
+    b.eq .Lexpr_add2
     sub x0, x3, x0
-    b .Lexpr_store
-.Lexpr_add:
+    b .Lexpr_store2
+.Lexpr_add2:
     add x0, x3, x0
-.Lexpr_store:
-    str x0, [sp, #PARSE_OFF_TMP_EXPR]
-    b .Lexpr_loop
-.Lexpr_done:
-    ldr x0, [sp, #PARSE_OFF_TMP_EXPR]
-.Lparse_expr_done:
-    ret
+.Lexpr_store2:
+    str x0, [sp, #16]
+    b .Lexpr_loop2
 
-.Lparse_term:
-    bl .Lparse_factor
-    ldr x1, [sp, #PARSE_OFF_OK]
-    cbz x1, .Lparse_term_done
-    str x0, [sp, #PARSE_OFF_TMP_TERM]
-.Lterm_loop:
-    ldr w2, [sp, #PARSE_OFF_TOK + TOK_KIND]
+.Lexpr_done2:
+    ldr x0, [sp, #16]
+.Lexpr_ret:
+    ldr x19, [sp, #0]
+    FRAME_LEAVE 32
+FUNC_END aster_parse__eval_expr__parse_expr
+
+FUNC_BEGIN aster_parse__eval_expr__parse_term
+    FRAME_ENTER 32
+    str x19, [sp, #0]
+    mov x19, x0
+
+    mov x0, x19
+    bl _aster_parse__eval_expr__parse_factor
+    ldr x1, [x19, #PARSE_OFF_OK]
+    cbz x1, .Lterm_ret
+    str x0, [sp, #16] // acc
+
+.Lterm_loop2:
+    ldr w2, [x19, #PARSE_OFF_TOK + TOK_KIND]
     cmp w2, #TOK_STAR
-    b.eq .Lterm_op
+    b.eq .Lterm_op2
     cmp w2, #TOK_SLASH
-    b.ne .Lterm_done
-.Lterm_op:
-    str w2, [sp, #PARSE_OFF_OP_TERM]
-    bl .Lnext_token
-    bl .Lparse_factor
-    ldr x1, [sp, #PARSE_OFF_OK]
-    cbz x1, .Lterm_done
-    ldr x3, [sp, #PARSE_OFF_TMP_TERM]
-    ldr w2, [sp, #PARSE_OFF_OP_TERM]
+    b.ne .Lterm_done2
+.Lterm_op2:
+    str w2, [sp, #24] // op
+    mov x0, x19
+    bl _aster_parse__eval_expr__next_token
+    mov x0, x19
+    bl _aster_parse__eval_expr__parse_factor
+    ldr x1, [x19, #PARSE_OFF_OK]
+    cbz x1, .Lterm_done2
+    ldr x3, [sp, #16]
+    ldr w2, [sp, #24]
     cmp w2, #TOK_STAR
-    b.eq .Lterm_mul
+    b.eq .Lterm_mul2
     sdiv x0, x3, x0
-    b .Lterm_store
-.Lterm_mul:
+    b .Lterm_store2
+.Lterm_mul2:
     mul x0, x3, x0
-.Lterm_store:
-    str x0, [sp, #PARSE_OFF_TMP_TERM]
-    b .Lterm_loop
-.Lterm_done:
-    ldr x0, [sp, #PARSE_OFF_TMP_TERM]
-.Lparse_term_done:
-    ret
+.Lterm_store2:
+    str x0, [sp, #16]
+    b .Lterm_loop2
 
-.Lparse_factor:
-    ldr w2, [sp, #PARSE_OFF_TOK + TOK_KIND]
+.Lterm_done2:
+    ldr x0, [sp, #16]
+.Lterm_ret:
+    ldr x19, [sp, #0]
+    FRAME_LEAVE 32
+FUNC_END aster_parse__eval_expr__parse_term
+
+FUNC_BEGIN aster_parse__eval_expr__parse_factor
+    FRAME_ENTER 32
+    str x19, [sp, #0]
+    mov x19, x0
+
+    ldr w2, [x19, #PARSE_OFF_TOK + TOK_KIND]
     cmp w2, #TOK_INT
-    b.eq .Lfactor_int
+    b.eq .Lfactor_int2
     cmp w2, #TOK_LPAREN
-    b.eq .Lfactor_lparen
+    b.eq .Lfactor_lparen2
     mov x0, #0
     mov x1, #0
-    str x1, [sp, #PARSE_OFF_OK]
-    ret
+    str x1, [x19, #PARSE_OFF_OK]
+    b .Lfactor_ret2
 
-.Lfactor_int:
-    ldr w3, [sp, #PARSE_OFF_TOK + TOK_START]
-    ldr w4, [sp, #PARSE_OFF_TOK + TOK_END]
-    ldr x5, [sp, #PARSE_OFF_SRC]
+.Lfactor_int2:
+    ldr w3, [x19, #PARSE_OFF_TOK + TOK_START]
+    ldr w4, [x19, #PARSE_OFF_TOK + TOK_END]
+    ldr x5, [x19, #PARSE_OFF_SRC]
     uxtw x3, w3
     uxtw x4, w4
     add x5, x5, x3
     sub x4, x4, x3
     mov x6, #0
     mov x7, #0
-.Lint_loop:
+.Lint_loop2:
     cmp x7, x4
-    b.hs .Lint_done
+    b.hs .Lint_done2
     ldrb w8, [x5, x7]
     sub w8, w8, #'0'
     mov x9, #10
     mul x6, x6, x9
     add x6, x6, x8
     add x7, x7, #1
-    b .Lint_loop
-.Lint_done:
+    b .Lint_loop2
+.Lint_done2:
     mov x0, x6
-    bl .Lnext_token
-    ret
+    str x0, [sp, #16]
+    // consume INT
+    mov x0, x19
+    bl _aster_parse__eval_expr__next_token
+    ldr x0, [sp, #16]
+    b .Lfactor_ret2
 
-.Lfactor_lparen:
-    bl .Lnext_token
-    bl .Lparse_expr
-    ldr x1, [sp, #PARSE_OFF_OK]
-    cbz x1, .Lfactor_return
-    ldr w2, [sp, #PARSE_OFF_TOK + TOK_KIND]
+.Lfactor_lparen2:
+    // consume '('
+    mov x0, x19
+    bl _aster_parse__eval_expr__next_token
+    mov x0, x19
+    bl _aster_parse__eval_expr__parse_expr
+    ldr x1, [x19, #PARSE_OFF_OK]
+    cbz x1, .Lfactor_ret2
+    ldr w2, [x19, #PARSE_OFF_TOK + TOK_KIND]
     cmp w2, #TOK_RPAREN
-    b.ne .Lfactor_fail
-    str x0, [sp, #PARSE_OFF_TMP_PAREN]
-    bl .Lnext_token
-    ldr x0, [sp, #PARSE_OFF_TMP_PAREN]
-    ret
+    b.ne .Lfactor_fail2
+    str x0, [sp, #16]
+    // consume ')'
+    mov x0, x19
+    bl _aster_parse__eval_expr__next_token
+    ldr x0, [sp, #16]
+    b .Lfactor_ret2
 
-.Lfactor_fail:
+.Lfactor_fail2:
     mov x1, #0
-    str x1, [sp, #PARSE_OFF_OK]
+    str x1, [x19, #PARSE_OFF_OK]
     mov x0, #0
-.Lfactor_return:
-    ret
+
+.Lfactor_ret2:
+    ldr x19, [sp, #0]
+    FRAME_LEAVE 32
+FUNC_END aster_parse__eval_expr__parse_factor
 
 // x0: src_ptr, x1: src_len, x2: pos (caller-saved)
 // returns value in x0, updates x2

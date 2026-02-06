@@ -24,24 +24,14 @@ Aster targets the gap between languages that are pleasant to write and languages
 
 ## Performance
 
-Aster is benchmarked continuously against C++ and Rust baselines under pinned toolchains. The headline metric is the geometric mean of `(Aster median / min(C++, Rust median))` across the full suite.
+Benchmark history is tracked in [`BENCH.md`](BENCH.md).
 
-**Latest result (Run 048): 0.998x geometric mean** — near parity with C++/Rust.
-
-| Benchmark | Ratio | | Benchmark | Ratio |
-|-----------|-------|-|-----------|-------|
-| dot | 0.832x | | fswalk | 0.810x |
-| gemm | 1.023x | | treewalk | 0.995x |
-| stencil | 0.986x | | dircount | 1.020x |
-| sort | 0.890x | | fsinventory | 1.035x |
-| json | 1.125x | | | |
-| hashmap | 1.125x | | | |
-| regex | 1.038x | | | |
-| async_io | 1.174x | | | |
-
-> Ratios < 1.0 mean Aster is faster than the baseline. Environment: Darwin arm64, Apple Clang 17.0.0, Rust 1.92.0.
-
-Full benchmark history is tracked in [`BENCH.md`](BENCH.md).
+Note: legacy runs in `BENCH.md` were produced before the repo enforced the
+"no compiler shims" policy (compile Aster source with the real `asterc`, no
+transpilers/templates). They are useful as historical exploration but are not
+authoritative. Once the real `asterc` exists and compiles `.as` source into the
+benchmark binaries, we will restart benchmarking and hill-climb toward the
+updated goalpost (+5-15% faster than best-of C++/Rust).
 
 ## Language Overview
 
@@ -159,13 +149,13 @@ aster/
 │   ├── tests/           # Language-level tests
 │   └── bench/           # Benchmark kernels (dot, gemm, sort, json, ...)
 ├── tools/
-│   ├── build/           # Build scripts (asterc compiler, module builder)
+│   ├── build/           # Build scripts (asm build helper + asterc wrapper)
 │   └── bench/           # Benchmark harness and baseline runners
 ├── docs/
 │   └── spec/            # Language, ABI, and IR documentation
 ├── INIT.md              # Production spec and task tracker
 ├── BENCH.md             # Benchmark history and deltas
-└── NEXT.md              # Current status and handoff notes
+└── NEXT.md              # Deprecated; see INIT.md
 ```
 
 ## Getting Started
@@ -173,7 +163,7 @@ aster/
 ### Prerequisites
 
 - macOS (arm64 or x86_64) or Linux (x86_64)
-- Python 3
+- Python 3 (benchmark harness reporting only; not part of the compiler toolchain)
 - Clang (Apple Clang 17+ or LLVM Clang)
 - Rust toolchain (for baseline benchmarks only)
 
@@ -204,15 +194,19 @@ FS_BENCH_LIST_FIXED=1 \
 tools/bench/run.sh
 ```
 
-Results are written to `tools/bench/out/`.
+Results are written to `$BENCH_OUT_DIR` (default: `.context/bench/out`).
 
 ### Compiling Aster Source
 
-The current toolchain uses an Aster0 subset compiler that transpiles to C and then to assembly via Clang:
+Benchmarks and programs must be compiled from `.as` source by the real Aster
+compiler (`asterc`), implemented in assembly (work in progress; see `INIT.md`).
 
 ```bash
-# Compile an Aster source file
-tools/build/asterc.sh aster/bench/dot/dot.as tools/bench/out/aster_dot.S
+# Build the compiler (once `asm/driver/asterc.S` exists)
+tools/build/build.sh asm/driver/asterc.S   # -> tools/build/out/asterc
+
+# Compile a program
+tools/build/asterc.sh aster/bench/dot/dot.as /tmp/aster_dot
 
 # Build an assembly test
 tools/build/build.sh asm/tests/hello.S
@@ -222,9 +216,7 @@ Environment variables for the compiler:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ASTER_BACKEND` | `c` | Backend: `c` (Aster0 -> C -> asm) or `asm` (template) |
-| `ASTER_CACHE` | `1` | Content-hash build cache |
-| `ASTER_TIMING` | `0` | Print per-phase timing (parse/emit/clang) |
+| `ASTER_COMPILER` | `tools/build/out/asterc` | Path to the `asterc` binary |
 
 ## Architecture
 
@@ -251,7 +243,7 @@ All stages share an arena allocator with stable IDs. No stage allocates inside h
 | Stage | Description |
 |-------|-------------|
 | **Stage 0** (done) | Macro-assembly library, test runner, build scripts |
-| **Stage 1** (current) | Aster0 subset compiler; lexer/parser in assembly |
+| **Stage 1** (current) | Aster compiler MVP (bench-complete subset) in assembly |
 | **Stage 2** | HIR, MIR, basic optimizations (const fold, DCE) |
 | **Stage 3** | Borrow checking, escape analysis, `noalloc` enforcement |
 | **Stage 4** | Performance convergence (LICM, CSE, vectorization, incremental compilation) |
@@ -261,7 +253,8 @@ All stages share an arena allocator with stable IDs. No stage allocates inside h
 
 The compiler and runtime are written in assembly (arm64 + x86_64) with a macro-assembly layer for readability. Core runtime primitives (arena allocator, strings, vectors, hash maps) are implemented in `asm/runtime/` and `asm/macros/`.
 
-The current working system is an **Aster0 subset compiler** written in Python (`tools/build/asterc.py`) that compiles benchmark kernels through a C intermediate to produce competitive native code. This serves as the proving ground while the assembly-first production compiler is built.
+The benchmark harness is implemented in bash (with Python used only for reporting),
+and will build Aster binaries via the real `asterc` compiler once it exists.
 
 ## Benchmark Suite
 
@@ -275,20 +268,21 @@ Scoring: `baseline = min(C++, Rust)` under pinned toolchains. Headline = geometr
 
 ## Status
 
-Aster is in **active early development**. The benchmark harness is functional and shows near-parity performance with C++/Rust. The assembly-first production compiler is under construction.
+Aster is in **active early development**. The benchmark harness is functional, but
+benchmark results are considered non-authoritative until the real `asterc` compiler
+is compiling `.as` source into the benchmark binaries (no shims).
 
 What works today:
-- Aster0 subset compiler for all benchmark kernels
-- Full benchmark harness with C++/Rust baselines
+- Full benchmark harness with C++/Rust baselines + fixed datasets
 - Assembly runtime primitives (arena, vec, string, hash)
 - Lexer and parser stubs in assembly (arm64 + x86_64)
 
 What's in progress:
-- Production compiler frontend (lexer, parser, AST) in assembly
-- Full type system and borrow checker
-- Self-hosting path
+- `asm/driver/asterc` CLI + end-to-end compile pipeline (parse/typecheck/codegen) for the benchmark subset
+- Full language frontend (AST/HIR/MIR), type system, borrow checker, and optimizations
+- Self-hosting path (compile the compiler with itself)
 
-See [`INIT.md`](INIT.md) for the full production spec and task tracker, and [`NEXT.md`](NEXT.md) for current status.
+See [`INIT.md`](INIT.md) for the full production spec, task tracker, and current status/handoff (and `BENCH.md` for benchmark history). `NEXT.md` is deprecated.
 
 ## License
 

@@ -2,3 +2,6 @@ root=/Users/stephenwalker
 max_depth=5
 generated=2026-02-03
 notes=generated with find; some paths may be skipped due to permissions
+sha256=27213dc9d5e7b85d398f0b360ab28bc940d75ccd0307fbacdf60aaa26f540510
+bytes=49256117
+lines=509855

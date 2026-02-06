@@ -2,6 +2,14 @@
 
 This file tracks benchmark runs and deltas over time.
 
+## Policy Note (2026-02-06)
+
+As of 2026-02-06 we enforce a "no compiler shims" policy: benchmark binaries must
+be produced by the real Aster compiler (`asterc`) compiling `.as` source (no
+Python transpilers, no pre-generated/hand-written assembly templates). Runs
+recorded before that compiler exists are legacy and should not be treated as the
+authoritative performance score for the project.
+
 ## Environment
 - Host: Darwin arm64
 - Clang: Apple clang 17.0.0 (clang-1700.6.3.2)

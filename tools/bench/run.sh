@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT_DIR="$ROOT/tools/bench/out"
+OUT_DIR="${BENCH_OUT_DIR:-$ROOT/.context/bench/out}"
+export BENCH_OUT_DIR="$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 BENCH_SET="${BENCH_SET:-all}"
@@ -40,6 +41,16 @@ for bench in "${BENCHES[@]}"; do
                     echo "generated=$(date +%Y-%m-%d)"
                 } > "$META_PATH"
             fi
+            if [[ -f "$LIST_PATH" && -f "$META_PATH" ]] && ! grep -q '^sha256=' "$META_PATH"; then
+                sha="$(shasum -a 256 "$LIST_PATH" | awk '{print $1}')"
+                bytes="$(wc -c < "$LIST_PATH" | tr -d ' ')"
+                lines="$(wc -l < "$LIST_PATH" | tr -d ' ')"
+                {
+                    echo "sha256=$sha"
+                    echo "bytes=$bytes"
+                    echo "lines=$lines"
+                } >> "$META_PATH"
+            fi
         else
             LIST_PATH="$OUT_DIR/fswalk_list.txt"
             "$ROOT/tools/bench/fswalk_list.sh" "$FS_BENCH_ROOT" "$LIST_PATH" "${FS_BENCH_MAX_DEPTH:-6}"
@@ -65,6 +76,16 @@ for bench in "${BENCHES[@]}"; do
                     echo "generated=$(date +%Y-%m-%d)"
                 } > "$META_PATH"
             fi
+            if [[ -f "$TREE_LIST_PATH" && -f "$META_PATH" ]] && ! grep -q '^sha256=' "$META_PATH"; then
+                sha="$(shasum -a 256 "$TREE_LIST_PATH" | awk '{print $1}')"
+                bytes="$(wc -c < "$TREE_LIST_PATH" | tr -d ' ')"
+                lines="$(wc -l < "$TREE_LIST_PATH" | tr -d ' ')"
+                {
+                    echo "sha256=$sha"
+                    echo "bytes=$bytes"
+                    echo "lines=$lines"
+                } >> "$META_PATH"
+            fi
         fi
         if [[ -n "$TREE_LIST_PATH" ]]; then
             export FS_BENCH_TREEWALK_LIST_PATH="$TREE_LIST_PATH"
@@ -73,24 +94,29 @@ for bench in "${BENCHES[@]}"; do
     fi
 done
 
+fs_built=0
 for bench in "${BENCHES[@]}"; do
-    # compile Aster source to assembly (Aster-only backend by default)
     if [[ "$bench" == "fswalk" || "$bench" == "treewalk" || "$bench" == "dircount" || "$bench" == "fsinventory" ]]; then
-        ASTER_BACKEND="${ASTER_BACKEND:-c}" "$ROOT/tools/build/asterc.sh" "$ROOT/aster/bench/fswalk/fswalk.as" "$OUT_DIR/aster_${bench}.S"
-        clang -c "$OUT_DIR/aster_${bench}.S" -I"$ROOT/asm/macros" -o "$OUT_DIR/aster_${bench}.o"
-        clang "$OUT_DIR/aster_${bench}.o" -o "$OUT_DIR/aster_${bench}"
-        clang++ "$ROOT/aster/bench/fswalk/cpp.cpp" -O3 -std=c++17 -o "$OUT_DIR/cpp_${bench}"
-        rustc -O "$ROOT/aster/bench/fswalk/rust.rs" -o "$OUT_DIR/rust_${bench}"
+        # All fs benches share the same source and dispatch by env vars.
+        # Compile once per language, then copy to the other names.
+        if [[ "$fs_built" -eq 0 ]]; then
+            "$ROOT/tools/build/asterc.sh" "$ROOT/aster/bench/fswalk/fswalk.as" "$OUT_DIR/aster_fswalk"
+            clang++ "$ROOT/aster/bench/fswalk/cpp.cpp" -O3 -std=c++17 -o "$OUT_DIR/cpp_fswalk"
+            rustc -O "$ROOT/aster/bench/fswalk/rust.rs" -o "$OUT_DIR/rust_fswalk"
+            fs_built=1
+        fi
+        if [[ "$bench" != "fswalk" ]]; then
+            cp -f "$OUT_DIR/aster_fswalk" "$OUT_DIR/aster_${bench}"
+            cp -f "$OUT_DIR/cpp_fswalk" "$OUT_DIR/cpp_${bench}"
+            cp -f "$OUT_DIR/rust_fswalk" "$OUT_DIR/rust_${bench}"
+        fi
         continue
     fi
 
-    ASTER_BACKEND="${ASTER_BACKEND:-c}" "$ROOT/tools/build/asterc.sh" "$ROOT/aster/bench/${bench}/${bench}.as" "$OUT_DIR/aster_${bench}.S"
-
-    clang -c "$OUT_DIR/aster_${bench}.S" -I"$ROOT/asm/macros" -o "$OUT_DIR/aster_${bench}.o"
-    clang "$OUT_DIR/aster_${bench}.o" -o "$OUT_DIR/aster_${bench}"
+    # Kernel benches compile each benchmark's source independently.
+    "$ROOT/tools/build/asterc.sh" "$ROOT/aster/bench/${bench}/${bench}.as" "$OUT_DIR/aster_${bench}"
     clang++ "$ROOT/aster/bench/${bench}/cpp.cpp" -O3 -o "$OUT_DIR/cpp_${bench}"
     rustc -O "$ROOT/aster/bench/${bench}/rust.rs" -o "$OUT_DIR/rust_${bench}"
-
 done
 
 python3 - <<'PY'
@@ -114,13 +140,21 @@ else:
 
 RUNS = 6
 WARMUP = 1
-FSWALK_RUNS = int(os.environ.get("FS_BENCH_FSWALK_RUNS", "2"))
-FSWALK_WARMUP = int(os.environ.get("FS_BENCH_FSWALK_WARMUP", "0"))
+
+def _env_int(*keys: str, default: int) -> int:
+    for k in keys:
+        v = os.environ.get(k)
+        if v is not None:
+            return int(v)
+    return default
+
+FSWALK_RUNS = _env_int("FS_BENCH_IO_RUNS", "FS_BENCH_FSWALK_RUNS", default=3)
+FSWALK_WARMUP = _env_int("FS_BENCH_IO_WARMUP", "FS_BENCH_FSWALK_WARMUP", default=0)
 
 bins = {
-    "aster": "./tools/bench/out/aster_{}",
-    "cpp": "./tools/bench/out/cpp_{}",
-    "rust": "./tools/bench/out/rust_{}",
+    "aster": os.path.join(os.environ.get("BENCH_OUT_DIR", "./tools/bench/out"), "aster_{}"),
+    "cpp": os.path.join(os.environ.get("BENCH_OUT_DIR", "./tools/bench/out"), "cpp_{}"),
+    "rust": os.path.join(os.environ.get("BENCH_OUT_DIR", "./tools/bench/out"), "rust_{}"),
 }
 
 def bench(cmd, args, runs=RUNS, warmup=WARMUP, env=None):
@@ -234,4 +268,11 @@ for bench_name in benches:
 if ratios:
     geom = math.exp(sum(math.log(r) for r in ratios) / len(ratios))
     print(f"Geometric mean (aster/baseline): {geom:.3f}x")
+    total = len(ratios)
+    wins = sum(1 for r in ratios if r < 1.0)
+    m5 = sum(1 for r in ratios if r <= 0.95)   # at least 5% faster
+    m15 = sum(1 for r in ratios if r <= 0.85)  # at least 15% faster
+    print(f"Win rate (aster < baseline): {wins}/{total} = {wins/total*100:.1f}%")
+    print(f"Margin >=5% faster (<=0.95x): {m5}/{total} = {m5/total*100:.1f}%")
+    print(f"Margin >=15% faster (<=0.85x): {m15}/{total} = {m15/total*100:.1f}%")
 PY

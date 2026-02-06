@@ -13,24 +13,24 @@ extern def write(fd is i32, buf is String, count is usize) returns isize
 extern def close(fd is i32) returns i32
 extern def printf(fmt is String, a is u64) returns i32
 
+struct FdPair
+    var rfd is i32
+    var wfd is i32
+
 # entry
 
 def main() returns i32
-    var fds is slice of i32 = malloc(8)
-    if fds is null then
-        return 1
-    if pipe(fds) != 0 then
-        free(fds)
+    var fds is FdPair
+    if pipe(&fds.rfd) != 0 then
         return 1
 
-    var rfd is i32 = fds[0]
-    var wfd is i32 = fds[1]
+    var rfd is i32 = fds.rfd
+    var wfd is i32 = fds.wfd
 
-    var buf is String = malloc(CHUNK)
+    var buf is MutString = malloc(CHUNK)
     if buf is null then
         close(rfd)
         close(wfd)
-        free(fds)
         return 1
 
     var i is usize = 0
@@ -38,13 +38,15 @@ def main() returns i32
         buf[i] = 97
         i = i + 1
 
+    var pfd is PollFd
+    pfd.fd = rfd
+    pfd.events = POLLIN_CONST
+    pfd.revents = 0
+
     var total is u64 = 0
     var iter is usize = 0
     while iter < ITERS do
         write(wfd, buf, CHUNK)
-        var pfd is PollFd
-        pfd.fd = rfd
-        pfd.events = POLLIN_CONST
         pfd.revents = 0
         if poll(&pfd, 1, -1) > 0 then
             var n is isize = read(rfd, buf, CHUNK)
@@ -56,5 +58,4 @@ def main() returns i32
     free(buf)
     close(rfd)
     close(wfd)
-    free(fds)
     return 0

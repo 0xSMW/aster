@@ -32,7 +32,7 @@ def count_matches(buf is String, len is usize) returns u64
 # entry
 
 def main() returns i32
-    var buf is String = malloc(N)
+    var buf is MutString = malloc(N)
     if buf is null then
         return 1
 
