@@ -27,6 +27,8 @@ dash_o:
     .asciz "-o"
 dash_O3:
     .asciz "-O3"
+dash_fno_omit_fp:
+    .asciz "-fno-omit-frame-pointer"
 dash_Wno_override_module:
     .asciz "-Wno-override-module"
 dotS:
@@ -44,7 +46,7 @@ dotS:
 .equ OFF_OUT_FP, 56
 .equ OFF_PID, 64
 .equ OFF_STATUS, 72
-.equ OFF_ARGV_ARR, 80  // 7 pointers = 56 bytes
+.equ OFF_ARGV_ARR, 80  // 8 pointers = 64 bytes
 .equ FRAME_SIZE, 144
 
 // int main(int argc, char **argv)
@@ -169,7 +171,7 @@ FUNC_BEGIN main
     ldr x0, [sp, #OFF_OUT_FP]
     bl _fclose
 
-    // spawn clang: clang -O3 -Wno-override-module <asm> -o <out>
+    // spawn clang: clang -O3 -fno-omit-frame-pointer -Wno-override-module <asm> -o <out>
     add x13, sp, #OFF_ARGV_ARR
     adrp x14, clang_str@PAGE
     add x14, x14, clang_str@PAGEOFF
@@ -177,17 +179,20 @@ FUNC_BEGIN main
     adrp x15, dash_O3@PAGE
     add x15, x15, dash_O3@PAGEOFF
     str x15, [x13, #8]
+    adrp x16, dash_fno_omit_fp@PAGE
+    add x16, x16, dash_fno_omit_fp@PAGEOFF
+    str x16, [x13, #16]
     adrp x16, dash_Wno_override_module@PAGE
     add x16, x16, dash_Wno_override_module@PAGEOFF
-    str x16, [x13, #16]
+    str x16, [x13, #24]
     ldr x17, [sp, #OFF_ASM_PATH]
-    str x17, [x13, #24]
+    str x17, [x13, #32]
     adrp x18, dash_o@PAGE
     add x18, x18, dash_o@PAGEOFF
-    str x18, [x13, #32]
+    str x18, [x13, #40]
     ldr x19, [sp, #OFF_OUT_PATH]
-    str x19, [x13, #40]
-    str xzr, [x13, #48]
+    str x19, [x13, #48]
+    str xzr, [x13, #56]
 
     // environ
     adrp x20, _environ@GOTPAGE
@@ -260,7 +265,7 @@ FUNC_END main
 .equ OFF_OUT_FP, 56
 .equ OFF_PID, 64
 .equ OFF_STATUS, 72
-.equ OFF_ARGV_ARR, 80  // 7 pointers = 56 bytes
+.equ OFF_ARGV_ARR, 80  // 8 pointers = 64 bytes
 .equ FRAME_SIZE, 144
 
 FUNC_BEGIN main
@@ -383,21 +388,23 @@ FUNC_BEGIN main
     movq OFF_OUT_FP(%rsp), %rdi
     callq _fclose
 
-    // argv array for clang: clang -O3 -Wno-override-module <ll> -o <out>
+    // argv array for clang: clang -O3 -fno-omit-frame-pointer -Wno-override-module <ll> -o <out>
     leaq OFF_ARGV_ARR(%rsp), %r8
     leaq clang_str(%rip), %rax
     movq %rax, 0(%r8)
     leaq dash_O3(%rip), %rax
     movq %rax, 8(%r8)
-    leaq dash_Wno_override_module(%rip), %rax
+    leaq dash_fno_omit_fp(%rip), %rax
     movq %rax, 16(%r8)
-    movq OFF_LL_PATH(%rsp), %rax
+    leaq dash_Wno_override_module(%rip), %rax
     movq %rax, 24(%r8)
-    leaq dash_o(%rip), %rax
+    movq OFF_LL_PATH(%rsp), %rax
     movq %rax, 32(%r8)
-    movq OFF_OUT_PATH(%rsp), %rax
+    leaq dash_o(%rip), %rax
     movq %rax, 40(%r8)
-    movq $0, 48(%r8)
+    movq OFF_OUT_PATH(%rsp), %rax
+    movq %rax, 48(%r8)
+    movq $0, 56(%r8)
 
     // environ
     movq _environ@GOTPCREL(%rip), %rax
