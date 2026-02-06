@@ -32,7 +32,7 @@ title = sys.argv[5]
 bench_md = root / "BENCH.md"
 bench_text = bench_md.read_text(encoding="utf-8")
 m = re.findall(r"^## Run (\\d+)", bench_text, flags=re.M)
-run_no = int(m[-1]) + 1 if m else 1
+run_no = (max(int(x) for x in m) + 1) if m else 1
 
 log = log_txt.read_text(encoding="utf-8", errors="replace").splitlines()
 

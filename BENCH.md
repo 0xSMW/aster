@@ -1950,3 +1950,101 @@ Geometric mean (aster/baseline): 0.935x
 Win rate (aster < baseline): 8/12 = 66.7%
 Margin >=5% faster (<=0.95x): 7/12 = 58.3%
 Margin >=15% faster (<=0.85x): 3/12 = 25.0%
+## Run 052 — `tools/ci/gates.sh` (stdlib+modules+fmt tests)
+Command: `tools/ci/gates.sh`
+Log: `/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/record/run_20260206_201129.txt`
+
+FS dataset:
+- FS_BENCH_ROOT: /Users/stephenwalker/conductor/workspaces/aster/cebu/.context/ci/fsroot
+- FS_BENCH_MAX_DEPTH: 6
+- fswalk_list: sha256=3db723a1a82f56d1cfc42d587e759bfe0464bf5a1974895c6fa8c8134108c0aa, bytes=885, lines=11
+- treewalk_dirs: sha256=067c81d134dc0a7d8c9208d251148b29f74ee878f5695a0bbd274e6beebc5c63, bytes=372, lines=5
+
+Benchmark: dot
+- aster: median 0.0167s  avg 0.0172s  min 0.0162s  stdev 0.0011s  runs 5
+  cpp: median 0.0167s  avg 0.0168s  min 0.0164s  stdev 0.0004s  runs 5
+ rust: median 0.0171s  avg 0.0171s  min 0.0163s  stdev 0.0005s  runs 5
+- perf delta (median): aster/baseline 1.001x
+
+
+Benchmark: gemm
+- aster: median 0.0027s  avg 0.0029s  min 0.0026s  stdev 0.0004s  runs 5
+  cpp: median 0.0029s  avg 0.0029s  min 0.0025s  stdev 0.0004s  runs 5
+ rust: median 0.0033s  avg 0.0033s  min 0.0031s  stdev 0.0002s  runs 5
+- perf delta (median): aster/baseline 0.964x
+
+
+Benchmark: stencil
+- aster: median 0.0041s  avg 0.0042s  min 0.0038s  stdev 0.0005s  runs 5
+  cpp: median 0.0032s  avg 0.0033s  min 0.0031s  stdev 0.0003s  runs 5
+ rust: median 0.0033s  avg 0.0034s  min 0.0032s  stdev 0.0002s  runs 5
+- perf delta (median): aster/baseline 1.278x
+
+
+Benchmark: sort
+- aster: median 0.0057s  avg 0.0057s  min 0.0052s  stdev 0.0004s  runs 5
+  cpp: median 0.0126s  avg 0.0126s  min 0.0123s  stdev 0.0002s  runs 5
+ rust: median 0.0053s  avg 0.0053s  min 0.0051s  stdev 0.0001s  runs 5
+- perf delta (median): aster/baseline 1.069x
+
+
+Benchmark: json
+- aster: median 0.0028s  avg 0.0028s  min 0.0026s  stdev 0.0001s  runs 5
+  cpp: median 0.0032s  avg 0.0033s  min 0.0026s  stdev 0.0006s  runs 5
+ rust: median 0.0034s  avg 0.0035s  min 0.0030s  stdev 0.0003s  runs 5
+- perf delta (median): aster/baseline 0.863x
+
+
+Benchmark: hashmap
+- aster: median 0.0077s  avg 0.0074s  min 0.0065s  stdev 0.0006s  runs 5
+  cpp: median 0.0062s  avg 0.0062s  min 0.0058s  stdev 0.0003s  runs 5
+ rust: median 0.0065s  avg 0.0064s  min 0.0060s  stdev 0.0004s  runs 5
+- perf delta (median): aster/baseline 1.238x
+
+
+Benchmark: regex
+- aster: median 0.0050s  avg 0.0049s  min 0.0043s  stdev 0.0004s  runs 5
+  cpp: median 0.0044s  avg 0.0045s  min 0.0043s  stdev 0.0003s  runs 5
+ rust: median 0.0042s  avg 0.0043s  min 0.0039s  stdev 0.0003s  runs 5
+- perf delta (median): aster/baseline 1.191x
+
+
+Benchmark: async_io
+- aster: median 0.0066s  avg 0.0064s  min 0.0055s  stdev 0.0008s  runs 5
+  cpp: median 0.0053s  avg 0.0054s  min 0.0051s  stdev 0.0003s  runs 5
+ rust: median 0.0051s  avg 0.0052s  min 0.0050s  stdev 0.0001s  runs 5
+- perf delta (median): aster/baseline 1.274x
+
+
+Benchmark: fswalk
+- aster: median 0.0040s  avg 0.0940s  min 0.0027s  stdev 0.1571s  runs 3
+  cpp: median 0.0034s  avg 0.0080s  min 0.0031s  stdev 0.0082s  runs 3
+ rust: median 0.0035s  avg 0.0086s  min 0.0033s  stdev 0.0091s  runs 3
+- perf delta (median): aster/baseline 1.161x
+
+
+Benchmark: treewalk
+- aster: median 0.0029s  avg 0.0076s  min 0.0022s  stdev 0.0087s  runs 3
+  cpp: median 0.0039s  avg 0.0080s  min 0.0033s  stdev 0.0077s  runs 3
+ rust: median 0.0030s  avg 0.0075s  min 0.0026s  stdev 0.0080s  runs 3
+- perf delta (median): aster/baseline 0.979x
+
+
+Benchmark: dircount
+- aster: median 0.0028s  avg 0.0072s  min 0.0027s  stdev 0.0076s  runs 3
+  cpp: median 0.0036s  avg 0.0076s  min 0.0034s  stdev 0.0071s  runs 3
+ rust: median 0.0030s  avg 0.0073s  min 0.0027s  stdev 0.0077s  runs 3
+- perf delta (median): aster/baseline 0.933x
+
+
+Benchmark: fsinventory
+- aster: median 0.0029s  avg 0.0072s  min 0.0027s  stdev 0.0077s  runs 3
+  cpp: median 0.0040s  avg 0.0077s  min 0.0035s  stdev 0.0070s  runs 3
+ rust: median 0.0030s  avg 0.0071s  min 0.0026s  stdev 0.0075s  runs 3
+- perf delta (median): aster/baseline 0.959x
+
+
+Geometric mean (aster/baseline): 1.067x
+Win rate (aster < baseline): 5/12 = 41.7%
+Margin >=5% faster (<=0.95x): 2/12 = 16.7%
+Margin >=15% faster (<=0.85x): 0/12 = 0.0%

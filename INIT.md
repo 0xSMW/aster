@@ -34,27 +34,27 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [x] asm: fix arm64 `parser_expr` hang (LR clobber) + fix runtime caller-saved clobbers (`vec_push`, `map_init`).
 
 ### 2) Benchmark Suite (sources + harness)
-- [x] Implement fswalk list replay with no helper objects (pure Aster + libc).
-- [x] Align fswalk list parsing across Aster/C++/Rust with raw byte scan.
-- [x] Split benchmark runs (kernels vs fswalk) to reduce cache interference.
-- [x] Add fixed fswalk dataset + metadata for repeatable runs.
-- [x] Add treewalk benchmark (live traversal) alongside fswalk list mode.
-- [x] Implement fswalk live traversal in Aster via fts (no helpers).
-- [x] Force C++ fswalk traversal to fts in harness for apples-to-apples.
-- [x] Add C++ treewalk bulk mode and align harness defaults with Aster bulk.
-- [x] Add treewalk bulk mode using getattrlistbulk (Aster-only, no helpers).
-- [x] Add treewalk bulk file sizes via ATTR_FILE_DATALENGTH (no per-file fstatat).
-- [x] Add treewalk bulk buffer override (FS_BENCH_BULK_BUF).
-- [x] Increase treewalk bulk buffer default to 8 MiB (FS_BENCH_BULK_BUF).
-- [x] Expand benchmark suite (JSON, regex, sort, hashmap, async IO, fs benches).
-- [x] Add dircount benchmark (live traversal count-only).
-- [x] Add fsinventory benchmark (live traversal inventory: files/dirs/symlinks + name hash).
-- [x] Bench harness: record `sha256/bytes/lines` for fixed fswalk/treewalk datasets (stricter comparisons).
-- [x] Add benchmark variance tracking (N runs, stddev, cache-state notes).
-- [x] Add benchmark isolation modes to CLI (kernels vs IO benches).
-- [x] Stabilize fswalk dataset sizing (configurable list size + repeatability checks).
-- [x] Benchmark harness: C++/Rust baselines + suite scoring (median, win-rate, geomean).
-- [x] Tune/optimize benchmark sources (kernel-level Aster code).
+- [ ] Implement fswalk list replay with no helper objects (pure Aster + libc).
+- [ ] Align fswalk list parsing across Aster/C++/Rust with raw byte scan.
+- [ ] Split benchmark runs (kernels vs fswalk) to reduce cache interference.
+- [ ] Add fixed fswalk dataset + metadata for repeatable runs.
+- [ ] Add treewalk benchmark (live traversal) alongside fswalk list mode.
+- [ ] Implement fswalk live traversal in Aster via fts (no helpers).
+- [ ] Force C++ fswalk traversal to fts in harness for apples-to-apples.
+- [ ] Add C++ treewalk bulk mode and align harness defaults with Aster bulk.
+- [ ] Add treewalk bulk mode using getattrlistbulk (Aster-only, no helpers).
+- [ ] Add treewalk bulk file sizes via ATTR_FILE_DATALENGTH (no per-file fstatat).
+- [ ] Add treewalk bulk buffer override (FS_BENCH_BULK_BUF).
+- [ ] Increase treewalk bulk buffer default to 8 MiB (FS_BENCH_BULK_BUF).
+- [ ] Expand benchmark suite (JSON, regex, sort, hashmap, async IO, fs benches).
+- [ ] Add dircount benchmark (live traversal count-only).
+- [ ] Add fsinventory benchmark (live traversal inventory: files/dirs/symlinks + name hash).
+- [ ] Bench harness: record `sha256/bytes/lines` for fixed fswalk/treewalk datasets (stricter comparisons).
+- [ ] Add benchmark variance tracking (N runs, stddev, cache-state notes).
+- [ ] Add benchmark isolation modes to CLI (kernels vs IO benches).
+- [ ] Stabilize fswalk dataset sizing (configurable list size + repeatability checks).
+- [ ] Benchmark harness: C++/Rust baselines + suite scoring (median, win-rate, geomean).
+- [ ] Tune/optimize benchmark sources (kernel-level Aster code).
 
 ### 3) Compiler MVP: `asterc` (real; bench-complete subset)
 - [x] Aster1(MVP): define the bench-complete language subset (syntax + semantics + ABI) with examples + tests.
@@ -73,15 +73,15 @@ Legend: [x] done, [ ] todo, [~] in progress
 ### 4) Compiler IR + Language Semantics (post-MVP)
 - [ ] Implement aster_ast data model + serialization helpers in assembly.
 - [ ] Implement HIR + desugaring pipeline (surface -> HIR).
-- [ ] Implement name resolution, symbol tables, and module imports.
+- [~] Implement name resolution, symbol tables, and module imports.
 - [ ] Implement type checking (constraints + unification) and effects.
-- [ ] Implement borrow rules, `noalloc` checking, and effect enforcement.
+- [~] Implement borrow rules, `noalloc` checking, and effect enforcement.
 - [ ] Implement MIR/SSA builder and verifier.
 - [ ] Implement optimizer passes (const fold, DCE, CSE, LICM, bounds-check elim).
 - [ ] Implement inliner and register allocator tuned for build time and runtime.
 - [x] Define stdlib ABI for slices/strings/arrays (layout + calling convention).
-- [ ] Build system: native module graph + deterministic incremental compilation in `asterc` (no Python).
-- [ ] Implement runtime (panic, alloc hooks, stack traces) and core stdlib.
+- [~] Build system: native module graph + deterministic incremental compilation in `asterc` (no Python).
+- [~] Implement runtime (panic, alloc hooks, stack traces) and core stdlib.
 - [ ] Implement stdlib fs traversal APIs (fts/opendir) to replace direct libc calls in benches.
 - [ ] Implement stdlib networking (`net`, `http`) for remote API clients:
       TCP + DNS + TLS + HTTP client with streaming responses (SSE-style) on macOS first.
@@ -90,22 +90,22 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [x] Implement aster CLI (build, run, test, bench) and minimal package graph.
 - [x] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
 - [x] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
-- [ ] Add asterfmt deterministic formatter and formatting tests.
+- [x] Add asterfmt deterministic formatter and formatting tests.
 - [x] Add language spec for memory model, effects, and FFI ABI.
-- [ ] Add conformance test suite (parser/type/IR/codegen) + fuzzing harness.
-- [ ] Add perf governance (pinned toolchains, perf CI, `BENCH.md` automation).
-- [ ] Add debug info + symbolization (DWARF, stack traces).
-- [ ] Build test runner + golden output harness for stdlib and compiler tests.
-- [ ] Add module/package registry layout and lockfile semantics.
-- [ ] Add release engineering (versioning, packages, installer, docs site).
-- [ ] Docs + sample apps (continuous):
+- [~] Add conformance test suite (parser/type/IR/codegen) + fuzzing harness.
+- [~] Add perf governance (pinned toolchains, perf CI, `BENCH.md` automation).
+- [~] Add debug info + symbolization (DWARF, stack traces).
+- [x] Build test runner + golden output harness for stdlib and compiler tests.
+- [~] Add module/package registry layout and lockfile semantics.
+- [~] Add release engineering (versioning, packages, installer, docs site).
+- [~] Docs + sample apps (continuous):
       maintain `docs/learn/` tutorials and `aster/apps/` sample apps as features land
       (FFI, fs tools, perf kernels, and at least one streaming HTTP client example, e.g. OpenAI chat stream).
 
 ### 5) Performance Hill-Climb (after real compiler produces the binaries)
-- [ ] Add build-time measurement (clean + incremental) to `tools/bench/run.sh` and record in `BENCH.md`.
+- [x] Add build-time measurement (clean + incremental) to `tools/bench/run.sh` and record in `BENCH.md`.
 - [x] Start a new `BENCH.md` epoch for real-`asterc` results (legacy shim-era runs are non-authoritative).
-- [ ] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
+- [~] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
 - [~] Implement deterministic build cache + incremental recompilation DAG.
 
 ### 6) Performance Domination (>=20% Faster on Every Benchmark)
@@ -120,15 +120,79 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [ ] For each benchmark, maintain a tracked list of the current top 3 suspected bottlenecks (profile-guided) and the planned optimization(s) to clear the `<=0.80x` target.
 
 ### 7) ML (post-production)
-- [ ] ML: define `aster_ml` architecture (tensor core, autograd, scheduler, device backends, serialization).
-- [ ] ML: build a python tinygrad parity harness (golden outputs + fuzz/property tests) to validate the Aster port.
-- [ ] ML: implement native tensor core (`Tensor`, `Device`, `DType`, shape/strides, views, broadcasting, reductions).
-- [ ] ML: implement reverse-mode autograd with an op registry and generated backward kernels.
-- [ ] ML: implement lazy IR + fusion scheduler (tinygrad-style) with cache keys and kernel compilation pipeline.
-- [ ] ML: implement CPU backend (vectorized elementwise/reductions + matmul/conv kernels + multithread runtime).
-- [ ] ML: implement macOS Metal backend (buffer mgmt, command queue, shader compile/cache, dispatch).
-- [ ] ML: port tinygrad nn/optim/training APIs to Aster and add a model zoo smoke suite (resnet/bert-like/llama-like).
-- [ ] ML: add ML benchmarks (training step + inference throughput/latency) and track deltas in `BENCH.md`.
+- [ ] ML: tinygrad port audit + parity target definition.
+      Define the v1 parity surface against the existing python tinygrad repo in `libraries/tinygrad/`:
+      `tinygrad/tensor.py`, `tinygrad/uop/*`, `tinygrad/engine/*`, `tinygrad/codegen/*`, `tinygrad/renderer/*`,
+      `tinygrad/device.py`, `tinygrad/runtime/ops_cpu.py`, `tinygrad/runtime/ops_metal.py`, and `tinygrad/nn/*`.
+      Use `libraries/tinygrad/test/` (plus `tinygrad/apps/llm.py`) as the behavioral spec to track.
+- [ ] ML: python tinygrad parity harness (golden outputs + fuzz/property tests).
+      Generate golden vectors (inputs/seeds + expected outputs/gradients) from python tinygrad and run them against the Aster port.
+      Include deterministic seeding, dtype/shape fuzzing, and a curated "must pass" subset from `libraries/tinygrad/test/`.
+- [ ] ML: `aster_ml` module architecture + ABI.
+      Define module boundaries and stable ABIs for: dtype/promotion, Tensor/IR, scheduling, codegen/renderers, device/runtime, nn/state.
+      Explicitly document which pieces are intended to match tinygrad semantics vs Aster-native replacements.
+- [ ] ML: core dtype system parity (`tinygrad/dtype.py`).
+      Implement `DType`/promotion, casts/bitcasts, and the "safe dtype" mapping used by serialization.
+- [ ] ML: device/buffer model parity (`tinygrad/device.py`).
+      Implement `Device` selection/canonicalization, `Buffer` (including views/sub-buffers), allocators, and host<->device copy semantics.
+- [ ] ML: core IR + rewrite engine parity (`tinygrad/uop/*`).
+      Implement `Ops`, `UOp` (hash-consing + stable keys), `UPat`/PatternMatcher, graph rewrite, and symbolic ints/Variables.
+      Preserve caching behavior (UOp cache + schedule cache keys) as a first-order performance requirement.
+- [ ] ML: Tensor front-end parity (`tinygrad/tensor.py`).
+      Tensor construction paths (scalar/list/bytes, disk tensors, `from_url`, `from_blob`), movement + math APIs, contiguity rules,
+      and data extraction (`data`, `item`, `tolist`, host `numpy`-style view equivalents).
+- [ ] ML: movement/shape semantics parity (`tinygrad/mixin/movement.py` + UOp shape rules).
+      Broadcasting, reshape/expand/permute/pad/shrink/flip, slicing/indexing/setitem semantics, and reduction axis behavior.
+- [ ] ML: math/reduction op parity (Tensor ops used by tests + `tinygrad/apps/llm.py`).
+      Elementwise ALU, comparisons, transcendental ops, reductions (sum/max/mean), softmax/logsoftmax, matmul/conv primitives.
+- [ ] ML: autograd parity (`tinygrad/gradient.py` + `Tensor.backward`/`Tensor.gradient`).
+      Implement rule-based reverse-mode autograd over the IR, gradient accumulation semantics, and higher-order gradients.
+- [ ] ML: scheduling + memory planning parity (`tinygrad/engine/schedule.py`, `tinygrad/engine/memory.py`).
+      Create deterministic `ExecItem` schedules from tensor sinks, dependency ordering, schedule caching, and buffer lifetime/memory planning.
+- [ ] ML: codegen pipeline parity (`tinygrad/codegen/*`, `tinygrad/renderer/*`).
+      IR -> kernel AST -> linearization -> rendering -> compile cache plumbing; implement at least a C-style renderer and a Metal renderer.
+- [ ] ML: CPU backend parity (`tinygrad/runtime/ops_cpu.py`).
+      Kernel compilation (clang/LLVM JIT or equivalent), launch/runtime calling convention, multithread execution, and vectorized kernels.
+- [ ] ML: macOS Metal backend parity (`tinygrad/runtime/ops_metal.py`).
+      Buffer management, command queue/buffers, shader compilation (source->MTLB) + caching, dispatch dims, and synchronization/profiling hooks.
+- [ ] ML: serialization + model IO parity (`tinygrad/nn/state.py`).
+      state_dict traversal/load, safetensors load/save, GGUF load (including required GGML quantization decode for target models),
+      and gzip/tar/zip extract helpers for common datasets/weights.
+- [ ] ML: nn + optim parity (`tinygrad/nn/*`).
+      Layers/utilities needed by model tests (Embedding/Linear/Conv, (RMS/Layer)Norm, attention/SDPA) plus optimizers (SGD/AdamW/LAMB).
+- [ ] ML: model zoo + apps smoke suite (`libraries/tinygrad/test/models/*`, `tinygrad/apps/llm.py`).
+      Run representative end-to-end workloads (MNIST training, BERT-like, Whisper-like, and LLM GGUF inference) as a production gate.
+- [ ] ML: ML benchmarks (new BENCH epoch; runtime + compile time).
+      Add ML benchmark set(s) (training step time + inference throughput/latency) and track deltas in `BENCH.md`.
+
+### 8) Algorithmic Conformance Suite (15 LeetCode Hard Problems in Native Aster)
+- [ ] Define the suite contract and wire it into the green gate.
+      Location: `aster/tests/leetcode/`.
+      Harness: extend `aster/tests/run.sh` to compile+run `aster/tests/leetcode/*.as` (expected: compile ok, exit 0).
+      Keep all tests deterministic (fixed inputs; no timing; bounded recursion).
+- [ ] Establish test conventions for `.as` algorithm tests:
+      each file contains `main()` that runs multiple cases and returns non-zero on the first failure (optionally prints diagnostics).
+      Prefer structural validation (element-by-element equality, invariants) over large golden text outputs.
+- [ ] Implement minimal "test-only stdlib" helpers needed by the suite (non-generic is fine initially):
+      vec/stack/deque/heap, basic hashing, and string utilities (strlen/compare/copy, char access).
+      Short-term: allow per-test duplication; mid-term: factor once module imports exist.
+- [ ] Implement the 15-problem suite (one file per problem), based on `plan/report-2026-02-06-aster-leetcode-hard-suite.md`:
+      10 Regular Expression Matching
+      23 Merge k Sorted Lists
+      25 Reverse Nodes in k-Group
+      32 Longest Valid Parentheses
+      37 Sudoku Solver
+      41 First Missing Positive
+      42 Trapping Rain Water
+      44 Wildcard Matching
+      52 N-Queens II
+      72 Edit Distance
+      84 Largest Rectangle in Histogram
+      124 Binary Tree Maximum Path Sum
+      127 Word Ladder
+      239 Sliding Window Maximum
+      312 Burst Balloons
+- [ ] Add docs: `aster/tests/leetcode/README.md` describing how to run the suite locally and how to add new problems/cases.
 
 Keep this list updated as work progresses.
 

@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+bash "$ROOT/tools/ci/toolchains.sh"
+
 # 1) Build the real compiler binary.
 bash "$ROOT/tools/build/build.sh" "$ROOT/asm/driver/asterc.S"
 
