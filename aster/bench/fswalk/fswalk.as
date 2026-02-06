@@ -22,8 +22,8 @@ const HASH_OFFSET is u64 = 1469598103934665603
 const HASH_PRIME is u64 = 1099511628211
 
 struct PathList2
-    var first is String
-    var second is String
+    var first is MutString
+    var second is MutString
 
 struct DirNode
     var fd is i32
@@ -131,7 +131,7 @@ def fswalk_list(list_path is String, files is mut ref u64, dirs is mut ref u64, 
         return 1
 
     var size is usize = file_len
-    var buf is String = malloc(size + BUF_PAD)
+    var buf is MutString = malloc(size + BUF_PAD)
     if buf is null then
         fclose(fp)
         return 1
@@ -213,7 +213,7 @@ def treewalk_list(list_path is String, files is mut ref u64, dirs is mut ref u64
         return 1
 
     var size is usize = file_len
-    var list_buf is String = malloc(size + BUF_PAD)
+    var list_buf is MutString = malloc(size + BUF_PAD)
     if list_buf is null then
         fclose(fp)
         return 1
@@ -226,7 +226,7 @@ def treewalk_list(list_path is String, files is mut ref u64, dirs is mut ref u64
         open_flags = open_flags | O_NOFOLLOW
 
     var buf_size is usize = env_usize("FS_BENCH_BULK_BUF", BULK_BUF_SIZE)
-    var buf is String = malloc(buf_size)
+    var buf is MutString = malloc(buf_size)
     if buf is null then
         free(list_buf)
         fclose(fp)
@@ -402,7 +402,7 @@ def fswalk(list_path is String, files is mut ref u64, dirs is mut ref u64, bytes
 
 # live traversal via fts
 
-def fswalk_live(root is String, files is mut ref u64, dirs is mut ref u64, bytes is mut ref u64, max_depth is i32, follow is i32, count_only is i32, inventory is i32, links is mut ref u64, name_bytes is mut ref u64, name_hash is mut ref u64, prof is mut ref BenchProfile) returns i32
+def fswalk_live(root is MutString, files is mut ref u64, dirs is mut ref u64, bytes is mut ref u64, max_depth is i32, follow is i32, count_only is i32, inventory is i32, links is mut ref u64, name_bytes is mut ref u64, name_hash is mut ref u64, prof is mut ref BenchProfile) returns i32
     var plist is PathList2
     plist.first = root
     plist.second = null
@@ -464,7 +464,7 @@ def fswalk_bulk(root is String, files is mut ref u64, dirs is mut ref u64, bytes
         return 1
 
     var buf_size is usize = env_usize("FS_BENCH_BULK_BUF", BULK_BUF_SIZE)
-    var buf is String = malloc(buf_size)
+    var buf is MutString = malloc(buf_size)
     if buf is null then
         free(stack)
         close(root_fd)
@@ -656,11 +656,11 @@ def fswalk_bulk(root is String, files is mut ref u64, dirs is mut ref u64, bytes
 
 # entry point for bench harness
 
-def main(argc is i32, argv is ptr of String) returns i32
+def main(argc is i32, argv is ptr of MutString) returns i32
     var list_path is String = getenv("FS_BENCH_LIST")
     var tree_list is String = getenv("FS_BENCH_TREEWALK_LIST")
 
-    var root is String = null
+    var root is MutString = null
     if argc >= 2 then
         root = argv[1]
     else

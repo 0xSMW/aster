@@ -43,17 +43,10 @@ def map_get(keys is slice of u64, vals is slice of u64, key is u64) returns u64
 # entry
 
 def main() returns i32
-    var bytes is usize = CAP * 8
-    var keys is slice of u64 = malloc(bytes)
-    var vals is slice of u64 = malloc(bytes)
+    var keys is slice of u64 = calloc(CAP, 8)
+    var vals is slice of u64 = calloc(CAP, 8)
     if keys is null or vals is null then
         return 1
-
-    var i is usize = 0
-    while i < CAP do
-        keys[i] = 0
-        vals[i] = 0
-        i = i + 1
 
     var seed is u64 = 1
     var idx is usize = 0

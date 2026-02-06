@@ -22,21 +22,27 @@ FUNC_BEGIN aster_rt__map_init
     bl _malloc
     cbz x0, .Lmap_init_fail
     mov x6, x0
+    str x6, [sp, #16]
+    ldr x4, [sp, #8]
     lsl x0, x4, #3
     bl _malloc
     cbz x0, .Lmap_init_fail_free
     mov x7, x0
+    str x7, [sp, #24]
     mov x0, x6
     mov x1, #0
+    ldr x4, [sp, #8]
     lsl x2, x4, #3
     bl _memset
+    ldr x6, [sp, #16]
+    ldr x7, [sp, #24]
     ldr x3, [sp, #0]
     str x6, [x3, #MAP_KEYS]
     str x7, [x3, #MAP_VALS]
     mov x0, #0
     b .Lmap_init_done
 .Lmap_init_fail_free:
-    mov x0, x6
+    ldr x0, [sp, #16]
     bl _free
 .Lmap_init_fail:
     mov x0, #1

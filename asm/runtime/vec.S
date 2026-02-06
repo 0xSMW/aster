@@ -117,6 +117,8 @@ FUNC_BEGIN aster_rt__vec_push
     cbnz x0, .Lvec_push_fail
     ldr x3, [sp, #0]
 .Lvec_push_has_cap:
+    // Caller-saved regs can be clobbered by vec_reserve; reload len before use.
+    ldr x5, [x3, #VEC_LEN]
     ldr x8, [x3, #VEC_PTR]
     ldr x9, [x3, #VEC_ELEM]
     mul x10, x5, x9

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT="$ROOT/asm/tests/out"
+OUT="${ASM_TEST_OUT_DIR:-$ROOT/.context/asm/tests/out}"
 INC="$ROOT/asm/macros"
 
 mkdir -p "$OUT"

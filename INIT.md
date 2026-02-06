@@ -2,16 +2,37 @@
 
 This document defines the production-grade requirements for the Aster language, compiler, runtime, standard library, build tool, and benchmark system. The implementation is assembly-first to maximize performance and to minimize runtime overhead. The language surface remains high-level and ergonomic like Ruby/Python.
 
+## Non-Negotiable Policy: No Compiler Shims
+
+- Do not add Python build scripts to the Aster toolchain (the compiler/build should be Aster/asm + standard system tools only).
+- Do not build "compiler shims" in Python (or any other language) that masquerade as the Aster compiler (e.g. Aster->C transpilers, template emitters, etc.).
+- Do not use pre-generated/hand-written assembly templates as a stand-in for compiling `.as` source for benchmarks.
+- Benchmarks must be compiled from Aster source by an Aster compiler (`asterc`). The compiler itself may be implemented in assembly for performance, but it must do real parsing/typechecking/codegen from `.as`.
+
 ## Task Tracker (kept current)
 
-Updated: 2026-02-04
+Updated: 2026-02-06
 Legend: [x] done, [ ] todo, [~] in progress
 
+### 0) Policy / Hygiene
 - [x] Reset workspace to assembly-first plan and clean repo.
 - [x] Create assembly-first repo skeleton and macro scaffolding.
+- [x] Add repo `.gitignore` for local/generated artifacts.
+- [x] Add/affirm "no compiler shims" policy in `INIT.md` and `AGENTS.md`.
+- [x] Purge shim-based benchmark "compilers" and template backends from the repo (policy enforcement).
+- [x] Deprecate `NEXT.md` and keep all handoff/status info in `INIT.md`.
+- [x] Clone tinygrad reference repo into `libraries/tinygrad` for Aster ML port planning (2026-02-06).
+
+### 1) Low-Level Runtime + Test Infrastructure (asm)
 - [x] Define assembly macro conventions, ABI, and object format targets.
 - [x] Add minimal build script and hello assembly test.
-- [x] Implement Aster0 bench compiler stub (template emitter + Aster->C for fswalk).
+- [x] Implement macro primitives in assembly (arena, vec, string, hash).
+- [x] Add x86_64 support for arena + string + hash runtime primitives.
+- [x] Add x86_64 support for vec + span + diagnostics + lexer + parser stubs.
+- [x] Add lexer indentation + parser expr assembly tests (arm64 + x86_64).
+- [x] asm: fix arm64 `parser_expr` hang (LR clobber) + fix runtime caller-saved clobbers (`vec_push`, `map_init`).
+
+### 2) Benchmark Suite (sources + harness)
 - [x] Implement fswalk list replay with no helper objects (pure Aster + libc).
 - [x] Align fswalk list parsing across Aster/C++/Rust with raw byte scan.
 - [x] Split benchmark runs (kernels vs fswalk) to reduce cache interference.
@@ -20,28 +41,34 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [x] Implement fswalk live traversal in Aster via fts (no helpers).
 - [x] Force C++ fswalk traversal to fts in harness for apples-to-apples.
 - [x] Add C++ treewalk bulk mode and align harness defaults with Aster bulk.
-- [x] Default benchmark harness to Aster-only backend (no asm templates).
 - [x] Add treewalk bulk mode using getattrlistbulk (Aster-only, no helpers).
-- [x] Add C-emit vectorization hints (`__restrict__`, clang loop pragmas).
-- [x] Tune kernel Aster0 sources (tiled stencil, FSM regex, pointer JSON).
 - [x] Add treewalk bulk file sizes via ATTR_FILE_DATALENGTH (no per-file fstatat).
 - [x] Add treewalk bulk buffer override (FS_BENCH_BULK_BUF).
-- [x] Optimize bench kernels (regex pointer scan, JSON digit unroll, robin hood hashmap).
-- [x] Add JSON 8-byte pre-scan and packed robin hood metadata.
-- [x] Increase treewalk bulk buffer default to 1MB.
-- [x] Add x86_64 support for arena + string + hash runtime primitives.
-- [x] Compile dot/gemm/stencil from Aster source (Aster0 -> C -> asm).
-- [x] Add Aster0 build cache (content hash + backend key).
-- [x] Add direct-ASM backend for kernel benchmarks (dot/gemm/stencil/sort).
-- [ ] (optional) Add ASM templates for microbench experiments (not used for scoring).
-- [x] Add module graph builder + cache (aster_build.py) with fixtures.
-- [x] Implement macro primitives in assembly (arena, vec, string, hash).
-- [x] Add x86_64 support for vec + span + diagnostics + lexer + parser stubs.
-- [x] Add lexer indentation + parser expr assembly tests (arm64 + x86_64).
-- [~] Implement aster_span core types in assembly (FileId, Span, SourceMap).
-- [~] Implement aster_diagnostics in assembly (spans, reports).
-- [~] Implement aster_frontend lexer (indentation, spans, tokens) in assembly.
-- [~] Implement CST parser with error recovery + precedence in assembly.
+- [x] Increase treewalk bulk buffer default to 8 MiB (FS_BENCH_BULK_BUF).
+- [x] Expand benchmark suite (JSON, regex, sort, hashmap, async IO, fs benches).
+- [x] Add dircount benchmark (live traversal count-only).
+- [x] Add fsinventory benchmark (live traversal inventory: files/dirs/symlinks + name hash).
+- [x] Bench harness: record `sha256/bytes/lines` for fixed fswalk/treewalk datasets (stricter comparisons).
+- [x] Add benchmark variance tracking (N runs, stddev, cache-state notes).
+- [x] Add benchmark isolation modes to CLI (kernels vs IO benches).
+- [x] Stabilize fswalk dataset sizing (configurable list size + repeatability checks).
+- [x] Benchmark harness: C++/Rust baselines + suite scoring (median, win-rate, geomean).
+- [x] Tune/optimize benchmark sources (kernel-level Aster code).
+
+### 3) Compiler MVP: `asterc` (assembly; bench-complete subset)
+- [ ] Aster1(MVP): define the bench-complete language subset (syntax + semantics + ABI) with examples + tests.
+- [ ] `asm/driver/asterc.S`: compiler CLI (compile `.as` -> `.S`/exe), deterministic output, and errors.
+- [~] Frontend: finish `aster_span` core types (FileId, Span, SourceMap).
+- [~] Frontend: finish `aster_diagnostics` (spans, reports) and render to stderr.
+- [~] Frontend: lexer (indentation, spans, tokens) including string/char literals and comments.
+- [~] Frontend: parser (module items + statements/exprs needed by benchmarks).
+- [ ] Type system (MVP): explicit types only; validate calls/returns; C-ABI externs.
+- [ ] Codegen (MVP, host arch first): direct AST->assembly for the bench subset (no HIR/MIR required for correctness).
+- [ ] Link: invoke system assembler/linker (clang/ld) from `asterc` to produce an executable.
+- [ ] E2E smoke: compile+run every benchmark with small inputs (fast), as a gating test.
+- [ ] Integration: `tools/bench/run.sh` must build Aster binaries only via `tools/build/out/asterc` (no shims).
+
+### 4) Compiler IR + Language Semantics (post-MVP)
 - [ ] Implement aster_ast data model + serialization helpers in assembly.
 - [ ] Implement HIR + desugaring pipeline (surface -> HIR).
 - [ ] Implement name resolution, symbol tables, and module imports.
@@ -50,36 +77,174 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [ ] Implement MIR/SSA builder and verifier.
 - [ ] Implement optimizer passes (const fold, DCE, CSE, LICM, bounds-check elim).
 - [ ] Implement inliner and register allocator tuned for build time and runtime.
-- [ ] Implement codegen to assembly for target triples (start with host).
+- [x] Define stdlib ABI for slices/strings/arrays (layout + calling convention).
+- [ ] Build system: native module graph + deterministic incremental compilation in `asterc` (no Python).
 - [ ] Implement runtime (panic, alloc hooks, stack traces) and core stdlib.
+- [ ] Implement stdlib fs traversal APIs (fts/opendir) to replace direct libc calls in benches.
 - [ ] Implement aster CLI (build, run, test, bench) and minimal package graph.
-- [~] Implement benchmark harness with C++/Rust baselines and dashboards.
 - [ ] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
 - [ ] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
-- [ ] Implement stdlib fs traversal APIs (fts/opendir) to replace direct libc calls in benches.
-- [~] Extend Aster0 subset (arrays, structs, calls, externs; added for-loops + type inference) until real frontend is ready.
-- [~] Extend Aster0 subset to cover structs/slices/return conventions (remove C transpile step).
-- [x] Aster0: handle `use` lines + extern prototypes in C-emit for modules.
-- [ ] Replace Aster0 stub with true frontend -> IR -> codegen (self-hosted path).
 - [ ] Add asterfmt deterministic formatter and formatting tests.
 - [ ] Add language spec for memory model, effects, and FFI ABI.
 - [ ] Add conformance test suite (parser/type/IR/codegen) + fuzzing harness.
-- [ ] Add perf governance (pinned toolchains, perf CI, BENCH.md automation).
-- [x] Stabilize fswalk dataset sizing (configurable list size + repeatability checks).
-- [x] Add benchmark variance tracking (N runs, stddev, cache-state notes).
-- [x] Add benchmark isolation modes to CLI (kernels vs IO benches).
-- [x] Expand benchmark suite (JSON parse, regex, sort, hashmap, async IO, treewalk).
-- [x] Add dircount benchmark (live traversal count-only).
-- [x] Add fsinventory benchmark (live traversal inventory: files/dirs/symlinks + name hash).
-- [~] Implement deterministic build cache + incremental recompilation DAG.
-- [x] Define stdlib ABI for slices/strings/arrays (layout + calling convention).
-- [ ] Implement borrow checker prototype for `ref`/`mut ref` and `noalloc` enforcement.
+- [ ] Add perf governance (pinned toolchains, perf CI, `BENCH.md` automation).
 - [ ] Add debug info + symbolization (DWARF, stack traces).
 - [ ] Build test runner + golden output harness for stdlib and compiler tests.
 - [ ] Add module/package registry layout and lockfile semantics.
 - [ ] Add release engineering (versioning, packages, installer, docs site).
 
+### 5) Performance Hill-Climb (after real compiler produces the binaries)
+- [ ] Add build-time measurement (clean + incremental) to `tools/bench/run.sh` and record in `BENCH.md`.
+- [ ] Start a new `BENCH.md` epoch for real-`asterc` results (legacy shim-era runs are non-authoritative).
+- [ ] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
+- [~] Implement deterministic build cache + incremental recompilation DAG.
+
+### 6) ML (post-production)
+- [ ] ML: define `aster_ml` architecture (tensor core, autograd, scheduler, device backends, serialization).
+- [ ] ML: build a python tinygrad parity harness (golden outputs + fuzz/property tests) to validate the Aster port.
+- [ ] ML: implement native tensor core (`Tensor`, `Device`, `DType`, shape/strides, views, broadcasting, reductions).
+- [ ] ML: implement reverse-mode autograd with an op registry and generated backward kernels.
+- [ ] ML: implement lazy IR + fusion scheduler (tinygrad-style) with cache keys and kernel compilation pipeline.
+- [ ] ML: implement CPU backend (vectorized elementwise/reductions + matmul/conv kernels + multithread runtime).
+- [ ] ML: implement macOS Metal backend (buffer mgmt, command queue, shader compile/cache, dispatch).
+- [ ] ML: port tinygrad nn/optim/training APIs to Aster and add a model zoo smoke suite (resnet/bert-like/llama-like).
+- [ ] ML: add ML benchmarks (training step + inference throughput/latency) and track deltas in `BENCH.md`.
+
 Keep this list updated as work progresses.
+
+## Compiler Capability Gates (Examples -> Bench Unlocks)
+
+These gates define the **minimum** compiler capabilities required to reach "all
+benchmarks compile and run" without shims. Each gate has a concrete Aster
+example and the benchmark(s) it unlocks.
+
+Gate 0: CLI + file IO + basic codegen to `main`
+```aster
+def main() returns i32
+    return 0
+```
+Unlocks: compiler plumbing (no benches yet).
+
+Gate 1: locals, arithmetic, comparisons, while-loops
+```aster
+def main() returns i32
+    var i is usize = 0
+    var sum is u64 = 0
+    while i < 1000 do
+        sum = sum + i
+        i = i + 1
+    return (sum != 0)
+```
+Unlocks: kernel control-flow backbone (dot/gemm/stencil/sort style loops).
+
+Gate 2: extern calls + string literals (C ABI)
+```aster
+extern def printf(fmt is String, a is u64) returns i32
+def main() returns i32
+    printf("%llu\n", 123)
+    return 0
+```
+Unlocks: most kernels (all current kernels print a result).
+
+Gate 3: heap + pointer indexing (malloc/free + load/store)
+```aster
+extern def malloc(n is usize) returns String
+extern def free(p is String) returns ()
+extern def printf(fmt is String, a is f64) returns i32
+
+def main() returns i32
+    var n is usize = 1024
+    var a is slice of f64 = malloc(n * 8)
+    if a is null then
+        return 1
+    var i is usize = 0
+    while i < n do
+        a[i] = 1.0
+        i = i + 1
+    printf("%f\n", a[0])
+    free(a)
+    return 0
+```
+Unlocks: dot/gemm/stencil/sort/regex/async_io (and most hot loops).
+
+Gate 4: structs + address-of + field access (FFI-friendly)
+```aster
+extern def pipe(fds is slice of i32) returns i32
+
+struct FdPair
+    var rfd is i32
+    var wfd is i32
+
+def main() returns i32
+    var fds is FdPair
+    return pipe(&fds.rfd)
+```
+Unlocks: async_io + parts of fswalk/treewalk that use structured FFI.
+
+Gate 5: "fs benches" surface area (pointers-to-structs + libc structs)
+- compile+run `aster/bench/fswalk/fswalk.as` end-to-end with fixed datasets.
+Unlocks: fswalk/treewalk/dircount/fsinventory.
+
+## Iteration Loop (After Gate 5)
+
+1. Change compiler/runtime/bench source.
+2. Run asm unit tests: `asm/tests/run.sh`.
+3. Run fast e2e compile+run smoke for every bench (small inputs).
+4. Run `BENCH_SET=kernels tools/bench/run.sh`, then full suite with fixed fs datasets.
+5. Only then record a new run in `BENCH.md` (real `asterc` epoch).
+
+## Current Status + Handoff (replaces NEXT.md)
+
+Updated: 2026-02-06
+
+This section is the live "where we are / how to run / what's next" handoff.
+`NEXT.md` is deprecated; keep this section current instead.
+
+Where we are:
+- Active tree: `asm/`, `aster/`, `tools/`, `docs/` (old Rust workspace removed).
+- Benchmark harness exists (`tools/bench/run.sh`) with C++/Rust baselines and fixed fs datasets.
+- The real Aster compiler (`asterc`) is in progress in assembly (`asm/compiler/*`, `asm/driver/*`).
+- Legacy shim-based benchmark compilers/templates were removed per policy; results in `BENCH.md`
+  prior to the real `asterc` are legacy and not a valid score going forward.
+
+Toolchain (today):
+- `asterc` is a native compiler implemented in assembly (allowed) and must compile `.as` source.
+- Build (once `asm/driver/asterc.S` exists): `tools/build/build.sh asm/driver/asterc.S`
+  which outputs `tools/build/out/asterc`.
+- `tools/build/asterc.sh` runs `tools/build/out/asterc` by default (override with `ASTER_COMPILER`).
+
+Benchmark harness:
+- `tools/bench/run.sh` builds Aster/C++/Rust into `$BENCH_OUT_DIR` (default:
+  `.context/bench/out`), runs each bench multiple times, and reports medians +
+  win-rate/margin + suite geometric mean.
+- Note: it requires a working `tools/build/out/asterc` to build Aster binaries.
+- Kernels only command: `BENCH_SET=kernels tools/bench/run.sh`
+- Filesystem benches (fixed dataset, recommended) command:
+  `FS_BENCH_ROOT=$HOME FS_BENCH_MAX_DEPTH=5 FS_BENCH_LIST_FIXED=1 BENCH_SET=fswalk tools/bench/run.sh`
+
+Filesystem bench model (see `aster/bench/fswalk/README.md` for the full list):
+- `fswalk`: list/replay mode (decouples traversal from metadata/stat).
+- `treewalk`: live traversal; `FS_BENCH_TREEWALK_MODE=bulk` uses macOS `getattrlistbulk`
+  and respects `FS_BENCH_BULK_BUF` (default 8388608).
+- `dircount`: live traversal count-only (`FS_BENCH_COUNT_ONLY=1`).
+- `fsinventory`: inventory hashing + symlink counting (`FS_BENCH_INVENTORY=1`).
+
+Filesystem env knobs (high leverage):
+- `FS_BENCH_TREEWALK_MODE=bulk|fts` (bulk uses `getattrlistbulk` on macOS).
+- `FS_BENCH_CPP_MODE=bulk|fts` (force baseline traversal strategy).
+- `FS_BENCH_BULK_BUF=<bytes>` (getattrlistbulk buffer size; default 8388608).
+- `FS_BENCH_PROFILE=1` (Aster prints traversal timing breakdown in bulk mode).
+
+Known macOS constraint:
+- `getattrlistbulk` requires requesting `ATTR_CMN_RETURNED_ATTRS`; attempts to omit it
+  to force a fixed record layout hit EINVAL.
+
+Near-term priorities (roadmap slice):
+1) Implement the real `asterc` end-to-end path: parse/typecheck/codegen `.as` -> binary.
+2) Expand the Aster1(MVP) subset until **all benchmarks compile and run** under `asterc`
+   (no shims), with fast e2e smoke tests for each bench.
+3) Re-baseline and restart hill-climbing in `BENCH.md` only after the real compiler is
+   producing the benchmark binaries.
 
 ## 1) Product goals
 
@@ -93,8 +258,8 @@ Primary objectives:
 - Benchmark-driven evolution: every optimization must improve or preserve a benchmark-based objective function.
 
 Non-negotiable acceptance gates (must be measurable):
-- Runtime performance: kernels within 1.05-1.25x of the C++/Rust baseline on the majority of core benchmarks.
-- Build performance: >80% win rate vs C++ and Rust on build time and run time under pinned toolchains.
+- Runtime performance: >80% win rate vs C++ and Rust, with a sustained margin target of +5-15% faster than the best baseline (track: >=5% faster on >=80% of benches and suite geomean 0.85-0.95x; target ~0.90x).
+- Build performance: >80% win rate vs C++ and Rust, with the same +5-15% margin target on clean builds and incremental rebuilds under pinned toolchains.
 - Noalloc enforcement: `noalloc` must be sound and enforced transitively.
 - Incremental rebuilds: small edits in a leaf module should not trigger whole-program rebuilds.
 - Deterministic builds: same inputs produce identical outputs (bit-for-bit) for release builds, modulo toolchain version IDs.
@@ -342,10 +507,10 @@ Stage 0: Toolchain and macro-assembly library
 - Implement macro library for strings, vectors, hash maps, and arenas.
 - Build a minimal test runner for assembly unit tests.
 
-Stage 1: Aster0 compiler (assembly)
-- Implement lexer, parser, and a tiny type checker for numeric code.
-- Generate assembly directly (no optimizer yet).
-- Support basic functions, structs, loops, and arrays.
+Stage 1: Aster compiler MVP (assembly; bench-complete subset)
+- Implement lexer, parser, and a minimal type checker for the bench subset.
+- Generate assembly directly (no optimizer required for correctness).
+- Support the language features used by the benchmark suite (FFI, structs, loops, pointers/slices).
 
 Stage 2: Aster1 compiler (assembly)
 - Add HIR, MIR, and basic optimizations (const fold, DCE).
@@ -403,6 +568,8 @@ Hill-climbing protocol:
 - Every optimization change runs the benchmark suite.
 - Only adopt changes that improve the geometric mean or improve at least 70% of benchmarks.
 - Tune thresholds for inlining, unrolling, and vectorization with automated sweeps.
+- Goalpost update (2026-02-06): beyond reaching >80% win rate, hill-climb toward a
+  sustained +5-15% margin vs the best baseline (see acceptance gates).
 
 ## 10) Definition of done (production)
 
@@ -411,5 +578,24 @@ The compiler is production-ready when:
 - It passes CI gates and has no known correctness bugs in the core spec.
 - It meets performance gates on the core benchmark suite.
 - It ships with stable formatting, LSP, and package management.
+
+## 11) Native ML roadmap (post-production): tinygrad -> Aster
+
+We want Aster to support modern machine learning workloads natively (training + inference) and to be able to migrate tinygrad from Python into Aster as the reference ML stack. The tinygrad repo is cloned for reference at `libraries/tinygrad` (Python source).
+
+This work starts after the native compiler is production-ready (Section 10) so that porting effort is not wasted on compiler churn.
+
+Phases (deliverables are cumulative):
+1) Parity harness: a reproducible test suite that compares Aster ML outputs against python tinygrad for the same graphs, dtypes, seeds, and devices (CPU first). This is the correctness gate for every migration step.
+2) Tensor core + runtime: native `Tensor` storage (shape/strides/views), dtype + casting rules, broadcasting, reductions, RNG, and a device abstraction that can target CPU and GPU backends with explicit memory transfer semantics.
+3) Autograd: reverse-mode autograd engine with a per-op backward registry, graph/tape representation, and a memory plan (saved tensors, rematerialization, and `noalloc`-friendly hot paths).
+4) Lazy IR + scheduler: tinygrad-style lazy graph, op fusion, and a scheduler that produces executable kernels with stable cache keys; include shape inference and simplification passes needed for fusion.
+5) Kernel backends:
+   - CPU: vectorized kernels (NEON/AVX), threaded execution, tuned matmul/conv/softmax/attention building blocks.
+   - Metal (macOS): compute shader codegen/compile, pipeline + binary cache, command buffer scheduling, and buffer pooling.
+   - Later: CUDA and/or Vulkan (same IR, different codegen/runtime).
+6) High-level ML APIs: `nn` modules, optimizers, loss functions, mixed precision, checkpointing/serialization (at least safetensors), and data input utilities needed to train and run real models end-to-end.
+7) Model/task coverage: maintain a small "model zoo" that exercises the whole stack (vision CNN, transformer encoder, small decoder-only LLM) plus inference-only targets (quantized or distilled models).
+8) Benchmarks + hill-climbing: add ML benchmarks to `BENCH.md` (kernels + training steps + inference) and hill-climb compiler/runtime/kernel changes against them, just like the existing benchmark suite.
 
 End of spec.
