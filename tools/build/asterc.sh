@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/tools/aster/modules.sh"
 
 if [[ $# -ne 2 ]]; then
     echo "usage: asterc.sh <input.as> <output>" >&2
@@ -18,11 +19,21 @@ fi
 IN="$1"
 OUT="$2"
 
+IN_REAL="$IN"
+if aster_file_has_use_preamble "$IN"; then
+    root_dir="$(aster_find_root "$(cd "$(dirname "$IN")" && pwd)")"
+    tmp_root="$ROOT/.context/build/tmp"
+    mkdir -p "$tmp_root"
+    combined="$tmp_root/combined.$$.$(basename "$IN")"
+    aster_preprocess_modules "$root_dir" "$IN" "$combined"
+    IN_REAL="$combined"
+fi
+
 if [[ -n "${ASTER_CACHE:-}" && "${ASTER_CACHE}" != "0" ]]; then
     CACHE_DIR="${ASTER_CACHE_DIR:-$ROOT/.context/build/cache}"
     mkdir -p "$CACHE_DIR"
 
-    src_sha="$(shasum -a 256 "$IN" | awk '{print $1}')"
+    src_sha="$(shasum -a 256 "$IN_REAL" | awk '{print $1}')"
     # Compiler binary hash is part of the cache key to avoid stale outputs after upgrades.
     cc_sha="$(shasum -a 256 "$ASTER_COMPILER" | awk '{print $1}')"
     key="${src_sha}_${cc_sha}"
@@ -40,7 +51,7 @@ if [[ -n "${ASTER_CACHE:-}" && "${ASTER_CACHE}" != "0" ]]; then
 
     mkdir -p "$entry"
     tmp_out="$bin_cache"
-    "$ASTER_COMPILER" "$IN" "$tmp_out"
+    "$ASTER_COMPILER" "$IN_REAL" "$tmp_out"
     cp -f "$tmp_out" "$OUT"
     if [[ -f "${tmp_out}.ll" ]]; then
         cp -f "${tmp_out}.ll" "$ll_cache"
@@ -49,4 +60,4 @@ if [[ -n "${ASTER_CACHE:-}" && "${ASTER_CACHE}" != "0" ]]; then
     exit 0
 fi
 
-"$ASTER_COMPILER" "$IN" "$OUT"
+"$ASTER_COMPILER" "$IN_REAL" "$OUT"
