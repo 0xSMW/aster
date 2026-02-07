@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <stdlib.h>
 
 // Optimized stencil helper used by the benchmark suite.
 //
@@ -57,26 +58,43 @@ typedef struct {
   uint64_t nthreads;
 } AsterStencilCtx;
 
-static inline void aster_stencil_step_rows(const double* in, double* out, uint64_t row_start, uint64_t row_end) {
+static inline void aster_stencil_step_rows(const double* __restrict in, double* __restrict out, uint64_t row_start, uint64_t row_end) {
   const uint64_t W = (uint64_t)ASTER_STENCIL_W;
   const uint64_t H = (uint64_t)ASTER_STENCIL_H;
   const double w0 = 0.5;
   const double w1 = 0.125;
 
-  for (uint64_t i = row_start; i < row_end; i++) {
-    const uint64_t base = i * W;
-    if (i == 0 || i + 1 == H) {
-      for (uint64_t j = 0; j < W; j++) out[base + j] = 0.0;
-      continue;
-    }
+  // Clamp to the interior; edges are always zeroed.
+  uint64_t i0 = row_start;
+  uint64_t i1 = row_end;
+  if (i0 < 1) i0 = 1;
+  if (i1 > H - 1) i1 = H - 1;
 
-    out[base + 0] = 0.0;
-    out[base + (W - 1)] = 0.0;
+  // Top/bottom edge rows (if this worker owns them).
+  if (row_start == 0) {
+    for (uint64_t j = 0; j < W; j++) out[j] = 0.0;
+  }
+  if (row_end >= H) {
+    const uint64_t base = (H - 1) * W;
+    for (uint64_t j = 0; j < W; j++) out[base + j] = 0.0;
+  }
+
+  for (uint64_t i = i0; i < i1; i++) {
+    const uint64_t base = i * W;
+    const double* row = in + base;
+    const double* row_up = row - W;
+    const double* row_dn = row + W;
+    double* out_row = out + base;
+
+    out_row[0] = 0.0;
+    out_row[W - 1] = 0.0;
+
+    // Inner loop: structured for vectorization (simple strided loads/stores).
+    #pragma clang loop vectorize(enable) interleave(enable)
     for (uint64_t j = 1; j + 1 < W; j++) {
-      const uint64_t idx = base + j;
-      const double center = in[idx] * w0;
-      const double sum = in[idx - W] + in[idx + W] + in[idx - 1] + in[idx + 1];
-      out[idx] = center + sum * w1;
+      const double center = row[j] * w0;
+      const double sum = row_up[j] + row_dn[j] + row[j - 1] + row[j + 1];
+      out_row[j] = center + sum * w1;
     }
   }
 }
@@ -108,6 +126,11 @@ double* aster_stencil_mt(double* in, double* out, uint64_t steps) {
   uint64_t nthreads = 1;
   long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
   if (ncpu > 0) nthreads = (uint64_t)ncpu;
+  const char* s = getenv("ASTER_STENCIL_THREADS");
+  if (s && *s) {
+    long v = strtol(s, 0, 10);
+    if (v > 0) nthreads = (uint64_t)v;
+  }
   if (nthreads > 8) nthreads = 8;
   if (nthreads > (uint64_t)ASTER_STENCIL_H) nthreads = (uint64_t)ASTER_STENCIL_H;
   if (nthreads < 1) nthreads = 1;
@@ -150,4 +173,3 @@ double* aster_stencil_mt(double* in, double* out, uint64_t steps) {
 
   return ctx[0].in;
 }
-

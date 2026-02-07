@@ -1,7 +1,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <poll.h>
 #include <unistd.h>
 
 static constexpr size_t ITERS = 2000;
@@ -29,14 +28,8 @@ int main() {
     const size_t total_iters = ITERS * bench_iters();
     for (size_t iter = 0; iter < total_iters; iter++) {
         (void)write(wfd, buf, CHUNK);
-        struct pollfd pfd;
-        pfd.fd = rfd;
-        pfd.events = POLLIN;
-        pfd.revents = 0;
-        if (poll(&pfd, 1, -1) > 0) {
-            ssize_t n = read(rfd, buf, CHUNK);
-            if (n > 0) total += (uint64_t)n;
-        }
+        ssize_t n = read(rfd, buf, CHUNK);
+        if (n > 0) total += (uint64_t)n;
     }
 
     std::printf("%llu\n", static_cast<unsigned long long>(total));

@@ -175,6 +175,7 @@ static void* fswalk_list_worker(void* arg) {
   FswalkListCtx* c = (FswalkListCtx*)arg;
   uint64_t files = 0, dirs = 0, bytes = 0, links = 0, name_bytes = 0;
   uint64_t name_hash = HASH_OFFSET;
+
   for (size_t i = c->start; i < c->end; i++) {
     const char* line = c->lines[i];
     if (!line || !*line) continue;

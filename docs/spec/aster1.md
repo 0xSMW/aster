@@ -91,7 +91,7 @@ whitelisted as non-allocating.
 
 Builtins:
 - `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `usize`, `isize`
-- `f64`
+- `f32`, `f64`
 - `void` and `()` (void)
 - `String`, `MutString`, `File` (currently opaque pointers for FFI)
 

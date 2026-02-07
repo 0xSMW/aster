@@ -2357,3 +2357,159 @@ Win rate (aster < baseline): 12/12 = 100.0%
 Margin >=5% faster (<=0.95x): 12/12 = 100.0%
 Margin >=15% faster (<=0.85x): 12/12 = 100.0%
 Margin >=20% faster (<=0.80x): 12/12 = 100.0%
+## Run 056 — bench template v2 (compile breakdowns + tables)
+Date: `2026-02-07 11:40:39`
+Command: `BENCH_BUILD_TIMING=1 BENCH_BUILD_TRIALS=5 FS_BENCH_ROOT='/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/ci/fsroot' FS_BENCH_MAX_DEPTH=6 FS_BENCH_LIST_FIXED=1 FS_BENCH_TREEWALK_LIST_FIXED=1 FS_BENCH_STRICT=1 tools/bench/run.sh`
+Log: `/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/record/run_20260207_114039.txt`
+
+### Toolchains
+- host: Darwin Stephens-MacBook-Pro.local 24.6.0 Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:30 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T6020 arm64
+- clang: Apple clang version 17.0.0 (clang-1700.6.3.2)
+- clang++: Apple clang version 17.0.0 (clang-1700.6.3.2)
+- rustc: rustc 1.92.0 (ded5c06cf 2025-12-08) (Homebrew)
+- python3: Python 3.9.6
+
+### Bench Config
+- BENCH_SET: all
+- benches: dot, gemm, stencil, sort, json, hashmap, regex, async_io, fswalk, treewalk, dircount, fsinventory
+- kernels: runs=9 warmup=2
+- fs: runs=7 warmup=1
+
+### Datasets
+- FS_BENCH_ROOT: /Users/stephenwalker/conductor/workspaces/aster/cebu/.context/ci/fsroot
+- FS_BENCH_MAX_DEPTH: 6
+- fswalk_list: sha256=3db723a1a82f56d1cfc42d587e759bfe0464bf5a1974895c6fa8c8134108c0aa, bytes=885, lines=11
+- treewalk_dirs: sha256=067c81d134dc0a7d8c9208d251148b29f74ee878f5695a0bbd274e6beebc5c63, bytes=372, lines=5
+
+### Compile Time (Build + Link)
+| stage | aster median | aster stdev | aster breakdown (asterc, clang) | cpp median | cpp stdev | rust median | rust stdev |
+|---|---:|---:|---|---:|---:|---:|---:|
+| clean (trials=5) | 0.751s | 0.145s | asterc 3.395ms (sd 0.095ms); clang 468.274ms (sd 4.017ms) | 1.415s | 0.146s | 1.410s | 0.009s |
+| incremental (touch protocol, trials=5) | 0.076s | 0.146s | asterc 0.241ms (sd 0.028ms); clang 45.618ms (sd 145.104ms) | 0.081s | 0.003s | 0.129s | 0.002s |
+
+### Runtime
+| bench | aster median | cpp median | rust median | aster/best |
+|---|---:|---:|---:|---:|
+| dot | 0.0144s (sd 0.0007, n=7) | 0.0152s (sd 0.0006, n=7) | 0.0152s (sd 0.0003, n=7) | 0.947x |
+| gemm | 0.0029s (sd 0.0003, n=7) | 0.0031s (sd 0.0003, n=7) | 0.0035s (sd 0.0003, n=7) | 0.921x |
+| stencil | 0.0040s (sd 0.0007, n=7) | 0.0043s (sd 0.0005, n=7) | 0.0055s (sd 0.0006, n=7) | 0.946x |
+| sort | 0.0041s (sd 0.0002, n=7) | 0.0041s (sd 0.0002, n=7) | 0.0043s (sd 0.0002, n=7) | 0.986x |
+| json | 0.0022s (sd 0.0002, n=7) | 0.0031s (sd 0.0002, n=7) | 0.0035s (sd 0.0002, n=7) | 0.696x |
+| hashmap | 0.0176s (sd 0.0013, n=7) | 0.0182s (sd 0.0009, n=7) | 0.0174s (sd 0.0009, n=7) | 1.009x |
+| regex | 0.0035s (sd 0.0003, n=7) | 0.0034s (sd 0.0001, n=7) | 0.0035s (sd 0.0002, n=7) | 1.036x |
+| async_io | 0.0035s (sd 0.0002, n=7) | 0.0036s (sd 0.0002, n=7) | 0.0039s (sd 0.0001, n=7) | 0.985x |
+| fswalk | 0.0021s (sd 0.0003, n=6) | 0.0022s (sd 0.0001, n=6) | 0.0029s (sd 0.0002, n=6) | 0.987x |
+| treewalk | 0.0022s (sd 0.0002, n=6) | 0.0032s (sd 0.0004, n=6) | 0.0029s (sd 0.0002, n=6) | 0.773x |
+| dircount | 0.0023s (sd 0.0002, n=6) | 0.0029s (sd 0.0665, n=6) | 0.0028s (sd 0.0003, n=6) | 0.807x |
+| fsinventory | 0.0024s (sd 0.0002, n=6) | 0.0027s (sd 0.0002, n=6) | 0.0029s (sd 0.0001, n=6) | 0.865x |
+
+### Summary
+- Geometric mean (aster/baseline): 0.907x
+- Win rate (aster < baseline): 10/12 = 83.3%
+- Margin >=5% faster (<=0.95x): 7/12 = 58.3%
+- Margin >=15% faster (<=0.85x): 3/12 = 25.0%
+- Margin >=20% faster (<=0.80x): 2/12 = 16.7%
+## Run 057 — bench template v2 (post-async_io+stencil+hashmap tuning)
+Date: `2026-02-07 12:02:48`
+Command: `BENCH_BUILD_TIMING=1 BENCH_BUILD_TRIALS=5 FS_BENCH_ROOT='/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/ci/fsroot' FS_BENCH_MAX_DEPTH=6 FS_BENCH_LIST_FIXED=1 FS_BENCH_TREEWALK_LIST_FIXED=1 FS_BENCH_STRICT=1 tools/bench/run.sh`
+Log: `/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/record/run_20260207_120248.txt`
+
+### Toolchains
+- host: Darwin Stephens-MacBook-Pro.local 24.6.0 Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:30 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T6020 arm64
+- clang: Apple clang version 17.0.0 (clang-1700.6.3.2)
+- clang++: Apple clang version 17.0.0 (clang-1700.6.3.2)
+- rustc: rustc 1.92.0 (ded5c06cf 2025-12-08) (Homebrew)
+- python3: Python 3.9.6
+
+### Bench Config
+- BENCH_SET: all
+- benches: dot, gemm, stencil, sort, json, hashmap, regex, async_io, fswalk, treewalk, dircount, fsinventory
+- kernels: runs=9 warmup=2
+- fs: runs=7 warmup=1
+
+### Datasets
+- FS_BENCH_ROOT: /Users/stephenwalker/conductor/workspaces/aster/cebu/.context/ci/fsroot
+- FS_BENCH_MAX_DEPTH: 6
+- fswalk_list: sha256=3db723a1a82f56d1cfc42d587e759bfe0464bf5a1974895c6fa8c8134108c0aa, bytes=885, lines=11
+- treewalk_dirs: sha256=067c81d134dc0a7d8c9208d251148b29f74ee878f5695a0bbd274e6beebc5c63, bytes=372, lines=5
+
+### Compile Time (Build + Link)
+| stage | aster median | aster stdev | aster breakdown (asterc, clang) | cpp median | cpp stdev | rust median | rust stdev |
+|---|---:|---:|---|---:|---:|---:|---:|
+| clean (trials=5) | 0.737s | 0.026s | asterc 3.094ms (sd 0.259ms); clang 466.189ms (sd 13.460ms) | 1.456s | 0.236s | 1.360s | 0.020s |
+| incremental (touch protocol, trials=5) | 0.074s | 0.003s | asterc 0.247ms (sd 0.014ms); clang 43.646ms (sd 1.571ms) | 0.074s | 0.003s | 0.124s | 0.035s |
+
+### Runtime
+| bench | aster median | cpp median | rust median | aster/best |
+|---|---:|---:|---:|---:|
+| dot | 0.0156s (sd 0.0005, n=7) | 0.0149s (sd 0.0003, n=7) | 0.0147s (sd 0.0011, n=7) | 1.061x |
+| gemm | 0.0031s (sd 0.0004, n=7) | 0.0029s (sd 0.0001, n=7) | 0.0033s (sd 0.0002, n=7) | 1.054x |
+| stencil | 0.0040s (sd 0.0004, n=7) | 0.0051s (sd 0.0005, n=7) | 0.0051s (sd 0.0009, n=7) | 0.789x |
+| sort | 0.0045s (sd 0.0002, n=7) | 0.0043s (sd 0.0002, n=7) | 0.0044s (sd 0.0002, n=7) | 1.053x |
+| json | 0.0020s (sd 0.0003, n=7) | 0.0030s (sd 0.0001, n=7) | 0.0031s (sd 0.0000, n=7) | 0.684x |
+| hashmap | 0.0113s (sd 0.0009, n=7) | 0.0181s (sd 0.0007, n=7) | 0.0187s (sd 0.0006, n=7) | 0.622x |
+| regex | 0.0037s (sd 0.0002, n=7) | 0.0037s (sd 0.0003, n=7) | 0.0038s (sd 0.0002, n=7) | 0.998x |
+| async_io | 0.0036s (sd 0.0002, n=7) | 0.0039s (sd 0.0002, n=7) | 0.0040s (sd 0.0003, n=7) | 0.929x |
+| fswalk | 0.0022s (sd 0.0002, n=6) | 0.0027s (sd 0.0004, n=6) | 0.0030s (sd 0.0002, n=6) | 0.815x |
+| treewalk | 0.0022s (sd 0.0002, n=6) | 0.0026s (sd 0.0002, n=6) | 0.0029s (sd 0.0002, n=6) | 0.836x |
+| dircount | 0.0022s (sd 0.0002, n=6) | 0.0028s (sd 0.0002, n=6) | 0.0028s (sd 0.0002, n=6) | 0.794x |
+| fsinventory | 0.0020s (sd 0.0002, n=6) | 0.0023s (sd 0.0001, n=6) | 0.0025s (sd 0.0001, n=6) | 0.868x |
+
+### Summary
+- Geometric mean (aster/baseline): 0.863x
+- Win rate (aster < baseline): 9/12 = 75.0%
+- Margin >=5% faster (<=0.95x): 8/12 = 66.7%
+- Margin >=15% faster (<=0.85x): 6/12 = 50.0%
+- Margin >=20% faster (<=0.80x): 4/12 = 33.3%
+## Run 058 — asterc-native modules+cache
+Date: `2026-02-07 12:35:33`
+Command: `BENCH_BUILD_TIMING=1 BENCH_BUILD_TRIALS=5 FS_BENCH_ROOT='/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/ci/fsroot' FS_BENCH_MAX_DEPTH=6 FS_BENCH_LIST_FIXED=1 FS_BENCH_TREEWALK_LIST_FIXED=1 FS_BENCH_STRICT=1 tools/bench/run.sh`
+Log: `/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/record/run_20260207_123533.txt`
+
+### Toolchains
+- host: Darwin Stephens-MacBook-Pro.local 24.6.0 Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:30 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T6020 arm64
+- clang: Apple clang version 17.0.0 (clang-1700.6.3.2)
+- clang++: Apple clang version 17.0.0 (clang-1700.6.3.2)
+- rustc: rustc 1.92.0 (ded5c06cf 2025-12-08) (Homebrew)
+- python3: Python 3.9.6
+
+### Bench Config
+- BENCH_SET: all
+- benches: dot, gemm, stencil, sort, json, hashmap, regex, async_io, fswalk, treewalk, dircount, fsinventory
+- kernels: runs=9 warmup=2
+- fs: runs=7 warmup=1
+
+### Datasets
+- FS_BENCH_ROOT: /Users/stephenwalker/conductor/workspaces/aster/cebu/.context/ci/fsroot
+- FS_BENCH_MAX_DEPTH: 6
+- fswalk_list: sha256=3db723a1a82f56d1cfc42d587e759bfe0464bf5a1974895c6fa8c8134108c0aa, bytes=885, lines=11
+- treewalk_dirs: sha256=067c81d134dc0a7d8c9208d251148b29f74ee878f5695a0bbd274e6beebc5c63, bytes=372, lines=5
+
+### Compile Time (Build + Link)
+| stage | aster median | aster stdev | aster breakdown (asterc, clang) | cpp median | cpp stdev | rust median | rust stdev |
+|---|---:|---:|---|---:|---:|---:|---:|
+| clean (trials=5) | 1.000s | 0.270s | asterc 3.067ms (sd 0.064ms); clang 456.396ms (sd 3.027ms) | 1.405s | 0.040s | 1.372s | 0.014s |
+| incremental (touch protocol, trials=5) | 0.074s | 0.005s | asterc 0.253ms (sd 0.015ms); clang 43.819ms (sd 2.280ms) | 0.075s | 0.004s | 0.119s | 0.009s |
+
+### Runtime
+| bench | aster median | cpp median | rust median | aster/best |
+|---|---:|---:|---:|---:|
+| dot | 0.0154s (sd 0.0007, n=7) | 0.0148s (sd 0.0004, n=7) | 0.0150s (sd 0.0002, n=7) | 1.042x |
+| gemm | 0.0031s (sd 0.0003, n=7) | 0.0030s (sd 0.0002, n=7) | 0.0037s (sd 0.0002, n=7) | 1.034x |
+| stencil | 0.0051s (sd 0.0009, n=7) | 0.0059s (sd 0.0025, n=7) | 0.0055s (sd 0.0008, n=7) | 0.932x |
+| sort | 0.0037s (sd 0.0001, n=7) | 0.0037s (sd 0.0001, n=7) | 0.0040s (sd 0.0001, n=7) | 1.004x |
+| json | 0.0025s (sd 0.0001, n=7) | 0.0034s (sd 0.0002, n=7) | 0.0033s (sd 0.0002, n=7) | 0.749x |
+| hashmap | 0.0125s (sd 0.0005, n=7) | 0.0187s (sd 0.0011, n=7) | 0.0179s (sd 0.0013, n=7) | 0.701x |
+| regex | 0.0039s (sd 0.0002, n=7) | 0.0037s (sd 0.0002, n=7) | 0.0040s (sd 0.0003, n=7) | 1.046x |
+| async_io | 0.0034s (sd 0.0001, n=7) | 0.0038s (sd 0.0002, n=7) | 0.0035s (sd 0.0002, n=7) | 0.987x |
+| fswalk | 0.0020s (sd 0.0003, n=6) | 0.0024s (sd 0.0002, n=6) | 0.0027s (sd 0.0002, n=6) | 0.822x |
+| treewalk | 0.0022s (sd 0.0003, n=6) | 0.0026s (sd 0.0002, n=6) | 0.0027s (sd 0.0003, n=6) | 0.838x |
+| dircount | 0.0026s (sd 0.0002, n=6) | 0.0027s (sd 0.0002, n=6) | 0.0028s (sd 0.0002, n=6) | 0.961x |
+| fsinventory | 0.0023s (sd 0.0003, n=6) | 0.0025s (sd 0.0002, n=6) | 0.0030s (sd 0.0003, n=6) | 0.946x |
+
+### Summary
+- Geometric mean (aster/baseline): 0.915x
+- Win rate (aster < baseline): 8/12 = 66.7%
+- Margin >=5% faster (<=0.95x): 6/12 = 50.0%
+- Margin >=15% faster (<=0.85x): 4/12 = 33.3%
+- Margin >=20% faster (<=0.80x): 2/12 = 16.7%

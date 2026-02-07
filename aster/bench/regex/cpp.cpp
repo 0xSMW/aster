@@ -5,6 +5,7 @@
 static constexpr size_t N = 1000000;
 static constexpr uint64_t LCG_A = 6364136223846793005ull;
 static constexpr uint64_t LCG_C = 1ull;
+static constexpr uint64_t LUT_PACK = 0x78636261ull;  // bytes: 'a','b','c','x' (little-endian)
 
 static size_t bench_iters() {
     const char* s = std::getenv("BENCH_ITERS");
@@ -14,41 +15,30 @@ static size_t bench_iters() {
     return static_cast<size_t>(v);
 }
 
-static uint64_t count_matches(const char* buf, size_t len) {
-    uint64_t count = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (buf[i] == 'a') {
-            size_t j = i + 1;
-            while (j < len && buf[j] == 'b') {
-                j++;
-            }
-            if (j < len && buf[j] == 'c') {
-                count++;
-            }
-        }
-    }
-    return count;
-}
-
 int main() {
-    char* buf = (char*)std::malloc(N);
-    if (!buf) return 1;
     const size_t iters = bench_iters();
     uint64_t total = 0;
     for (size_t it = 0; it < iters; it++) {
         uint64_t seed = 1;
+        uint64_t matches = 0;
+        int state = 0;  // 0 = seek 'a'; 1 = after 'a' (consume b* then expect 'c' for a match).
         for (size_t i = 0; i < N; i++) {
             seed = seed * LCG_A + LCG_C;
-            uint8_t r = static_cast<uint8_t>((seed >> 32) & 3);
-            char ch = 'x';
-            if (r == 0) ch = 'a';
-            else if (r == 1) ch = 'b';
-            else if (r == 2) ch = 'c';
-            buf[i] = ch;
+            uint64_t r = (seed >> 32) & 3ull;
+            uint8_t ch = (uint8_t)((LUT_PACK >> (r << 3)) & 255ull);
+            if (state == 0) {
+                if (ch == (uint8_t)'a') state = 1;
+            } else {
+                if (ch == (uint8_t)'c') {
+                    matches++;
+                    state = 0;
+                } else if (ch == (uint8_t)'x') {
+                    state = 0;
+                }
+            }
         }
-        total += count_matches(buf, N);
+        total += matches;
     }
     std::printf("%llu\n", static_cast<unsigned long long>(total));
-    std::free(buf);
     return 0;
 }

@@ -2,18 +2,9 @@ use std::io::Write;
 
 const ITERS: usize = 2000;
 const CHUNK: usize = 4096;
-const POLLIN: i16 = 0x0001;
-
-#[repr(C)]
-struct PollFd {
-    fd: i32,
-    events: i16,
-    revents: i16,
-}
 
 extern "C" {
     fn pipe(fds: *mut i32) -> i32;
-    fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
     fn read(fd: i32, buf: *mut u8, count: usize) -> isize;
     fn write(fd: i32, buf: *const u8, count: usize) -> isize;
     fn close(fd: i32) -> i32;
@@ -42,12 +33,9 @@ fn main() {
     for _ in 0..total_iters {
         unsafe {
             let _ = write(wfd, buf.as_ptr(), CHUNK);
-            let mut pfd = PollFd { fd: rfd, events: POLLIN, revents: 0 };
-            if poll(&mut pfd as *mut PollFd, 1, -1) > 0 {
-                let n = read(rfd, buf.as_mut_ptr(), CHUNK);
-                if n > 0 {
-                    total += n as u64;
-                }
+            let n = read(rfd, buf.as_mut_ptr(), CHUNK);
+            if n > 0 {
+                total += n as u64;
             }
         }
     }

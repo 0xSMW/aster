@@ -9,10 +9,46 @@ mkdir -p "$OUT_DIR"
 DATA_DIR="$ROOT/.context/bench/data"
 mkdir -p "$DATA_DIR"
 
+UNAME_S="$(uname -s 2>/dev/null || true)"
+IS_DARWIN=0
+if [[ "$UNAME_S" == "Darwin" ]]; then
+    IS_DARWIN=1
+fi
+
+echo "Toolchains:"
+echo "- host: $(uname -a)"
+echo "- clang: $(clang --version | head -n 1)"
+echo "- clang++: $(clang++ --version | head -n 1)"
+echo "- rustc: $(rustc --version)"
+echo "- python3: $(python3 --version)"
+echo ""
+
+# Baseline compilation flags for the C++/Rust competitors.
+# Note: keep these "reasonable" for build-time comparisons; focus on
+# CPU tuning and algorithmic improvements first.
+CPP_FLAGS_BASE=(-O3 -DNDEBUG -march=native -mtune=native -std=c++17)
+CPP_FLAGS_MATH=(-ffast-math -fno-math-errno -fno-trapping-math)
+RUST_FLAGS_BASE=(-O -C target-cpu=native -C panic=abort)
+
 now_ns() {
     python3 - <<'PY'
 import time
 print(time.time_ns())
+PY
+}
+
+bump_mtime() {
+    local path="$1"
+    python3 - <<'PY' "$path"
+import os
+import sys
+import time
+
+p = sys.argv[1]
+# Nudge into the future by 2s so `test -nt` (which may only compare seconds on
+# some platforms/filesystems) reliably detects "newer than output".
+now = time.time_ns() + 2_000_000_000
+os.utime(p, ns=(now, now))
 PY
 }
 
@@ -196,6 +232,8 @@ build_all() {
     local dep_asterc="$ROOT/tools/build/out/asterc"
 
     local total_ns_aster=0
+    local total_ns_asterc=0
+    local total_ns_clang=0
     local total_ns_cpp=0
     local total_ns_rust=0
 
@@ -211,20 +249,44 @@ build_all() {
             if [[ "$fs_built" -eq 0 ]]; then
                 if needs_build "$OUT_DIR/aster_fswalk" "$aster_src" "$dep_asterc"; then
                     local t0=0 t1=0
-                    if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
-                    ASTER_LINK_OBJ="$ROOT/tools/build/out/fswalk_rt.o" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_fswalk"
-                    if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_aster=$(( total_ns_aster + (t1 - t0) )); fi
+                    if [[ "$timing" -eq 1 ]]; then
+                        t0="$(now_ns)"
+                        local out rc
+                        rc=0
+                        set +e
+                        out="$({ ASTER_TIMING=1 ASTER_NATIVE="${ASTER_NATIVE:-1}" ASTER_FAST_MATH="${ASTER_FAST_MATH:-1}" ASTER_LINK_OBJ="$ROOT/tools/build/out/fswalk_rt.o" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_fswalk"; } 2>&1)"
+                        rc=$?
+                        set -e
+                        if [[ "$rc" -ne 0 ]]; then
+                            printf '%s\n' "$out" >&2
+                            return "$rc"
+                        fi
+                        t1="$(now_ns)"
+                        total_ns_aster=$(( total_ns_aster + (t1 - t0) ))
+
+                        local tl
+                        tl="$(printf '%s\n' "$out" | grep '^ASTER_TIMING ' | tail -n 1 || true)"
+                        if [[ -n "$tl" ]]; then
+                            local a_ns=0 c_ns=0
+                            if [[ "$tl" =~ asterc_ns=([0-9]+) ]]; then a_ns="${BASH_REMATCH[1]}"; fi
+                            if [[ "$tl" =~ clang_ns=([0-9]+) ]]; then c_ns="${BASH_REMATCH[1]}"; fi
+                            total_ns_asterc=$(( total_ns_asterc + a_ns ))
+                            total_ns_clang=$(( total_ns_clang + c_ns ))
+                        fi
+                    else
+                        ASTER_NATIVE="${ASTER_NATIVE:-1}" ASTER_FAST_MATH="${ASTER_FAST_MATH:-1}" ASTER_LINK_OBJ="$ROOT/tools/build/out/fswalk_rt.o" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_fswalk"
+                    fi
                 fi
                 if needs_build "$OUT_DIR/cpp_fswalk" "$cpp_src"; then
                     local t0=0 t1=0
                     if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
-                    clang++ "$cpp_src" -O3 -std=c++17 -o "$OUT_DIR/cpp_fswalk"
+                    clang++ "$cpp_src" "${CPP_FLAGS_BASE[@]}" "${CPP_FLAGS_MATH[@]}" -o "$OUT_DIR/cpp_fswalk"
                     if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_cpp=$(( total_ns_cpp + (t1 - t0) )); fi
                 fi
                 if needs_build "$OUT_DIR/rust_fswalk" "$rust_src"; then
                     local t0=0 t1=0
                     if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
-                    rustc -O "$rust_src" -o "$OUT_DIR/rust_fswalk"
+                    rustc "${RUST_FLAGS_BASE[@]}" "$rust_src" -o "$OUT_DIR/rust_fswalk"
                     if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_rust=$(( total_ns_rust + (t1 - t0) )); fi
                 fi
                 fs_built=1
@@ -251,61 +313,172 @@ build_all() {
 
         if needs_build "$OUT_DIR/aster_${bench}" "$aster_src" "$dep_asterc"; then
             local t0=0 t1=0
-            if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
-            if [[ "$bench" == "gemm" ]]; then
-                ASTER_LINK_ACCELERATE=1 "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
-            elif [[ "$bench" == "stencil" ]]; then
-                ASTER_LINK_OBJ="$ROOT/tools/build/out/stencil_rt.o" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+            if [[ "$timing" -eq 1 ]]; then
+                t0="$(now_ns)"
+                local out rc
+                rc=0
+                set +e
+                if [[ "$bench" == "gemm" ]]; then
+                    out="$({ ASTER_TIMING=1 ASTER_NATIVE="${ASTER_NATIVE:-1}" ASTER_FAST_MATH="${ASTER_FAST_MATH:-1}" ASTER_LINK_ACCELERATE=1 "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"; } 2>&1)"
+                elif [[ "$bench" == "stencil" ]]; then
+                    out="$({ ASTER_TIMING=1 ASTER_NATIVE="${ASTER_NATIVE:-1}" ASTER_FAST_MATH="${ASTER_FAST_MATH:-1}" ASTER_LINK_OBJ="$ROOT/tools/build/out/stencil_rt.o" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"; } 2>&1)"
+                else
+                    out="$({ ASTER_TIMING=1 ASTER_NATIVE="${ASTER_NATIVE:-1}" ASTER_FAST_MATH="${ASTER_FAST_MATH:-1}" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"; } 2>&1)"
+                fi
+                rc=$?
+                set -e
+                if [[ "$rc" -ne 0 ]]; then
+                    printf '%s\n' "$out" >&2
+                    return "$rc"
+                fi
+                t1="$(now_ns)"
+                total_ns_aster=$(( total_ns_aster + (t1 - t0) ))
+
+                local tl
+                tl="$(printf '%s\n' "$out" | grep '^ASTER_TIMING ' | tail -n 1 || true)"
+                if [[ -n "$tl" ]]; then
+                    local a_ns=0 c_ns=0
+                    if [[ "$tl" =~ asterc_ns=([0-9]+) ]]; then a_ns="${BASH_REMATCH[1]}"; fi
+                    if [[ "$tl" =~ clang_ns=([0-9]+) ]]; then c_ns="${BASH_REMATCH[1]}"; fi
+                    total_ns_asterc=$(( total_ns_asterc + a_ns ))
+                    total_ns_clang=$(( total_ns_clang + c_ns ))
+                fi
             else
-                "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+                if [[ "$bench" == "gemm" ]]; then
+                    ASTER_NATIVE="${ASTER_NATIVE:-1}" ASTER_FAST_MATH="${ASTER_FAST_MATH:-1}" ASTER_LINK_ACCELERATE=1 "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+                elif [[ "$bench" == "stencil" ]]; then
+                    ASTER_NATIVE="${ASTER_NATIVE:-1}" ASTER_FAST_MATH="${ASTER_FAST_MATH:-1}" ASTER_LINK_OBJ="$ROOT/tools/build/out/stencil_rt.o" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+                else
+                    ASTER_NATIVE="${ASTER_NATIVE:-1}" ASTER_FAST_MATH="${ASTER_FAST_MATH:-1}" "$ROOT/tools/build/asterc.sh" "$aster_src" "$OUT_DIR/aster_${bench}"
+                fi
             fi
-            if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_aster=$(( total_ns_aster + (t1 - t0) )); fi
         fi
         if needs_build "$OUT_DIR/cpp_${bench}" "$cpp_src"; then
             local t0=0 t1=0
             if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
-            clang++ "$cpp_src" -O3 -o "$OUT_DIR/cpp_${bench}"
+            cpp_flags=("${CPP_FLAGS_BASE[@]}" "${CPP_FLAGS_MATH[@]}")
+            if [[ "$bench" == "stencil" ]]; then
+                cpp_flags+=(-pthread)
+            fi
+            if [[ "$bench" == "gemm" && "$IS_DARWIN" -eq 1 ]]; then
+                cpp_flags+=(-framework Accelerate)
+            fi
+            clang++ "$cpp_src" "${cpp_flags[@]}" -o "$OUT_DIR/cpp_${bench}"
             if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_cpp=$(( total_ns_cpp + (t1 - t0) )); fi
         fi
         if needs_build "$OUT_DIR/rust_${bench}" "$rust_src"; then
             local t0=0 t1=0
             if [[ "$timing" -eq 1 ]]; then t0="$(now_ns)"; fi
-            rustc -O "$rust_src" -o "$OUT_DIR/rust_${bench}"
+            rustc "${RUST_FLAGS_BASE[@]}" "$rust_src" -o "$OUT_DIR/rust_${bench}"
             if [[ "$timing" -eq 1 ]]; then t1="$(now_ns)"; total_ns_rust=$(( total_ns_rust + (t1 - t0) )); fi
         fi
     done
 
     if [[ "$timing" -eq 1 ]]; then
-        # ns -> seconds with 3 decimals (avoid bc dependency)
-        NS_ASTER="$total_ns_aster" NS_CPP="$total_ns_cpp" NS_RUST="$total_ns_rust" python3 - <<'PY'
-import os
-def fmt(ns: int) -> str:
-    return f"{ns/1e9:.3f}s"
-print("Build time (this build stage):")
-print(f"- aster: {fmt(int(os.environ['NS_ASTER']))}")
-print(f"- cpp:   {fmt(int(os.environ['NS_CPP']))}")
-print(f"- rust:  {fmt(int(os.environ['NS_RUST']))}")
-PY
-        echo ""
+        echo "BUILD_STAGE aster_ns=$total_ns_aster asterc_ns=$total_ns_asterc clang_ns=$total_ns_clang cpp_ns=$total_ns_cpp rust_ns=$total_ns_rust"
     fi
 }
 
 if [[ -n "${BENCH_BUILD_TIMING:-}" ]]; then
-    # Clean build timing: wipe just the benchmark binaries/IR in OUT_DIR.
-    rm -f "$OUT_DIR"/aster_* "$OUT_DIR"/cpp_* "$OUT_DIR"/rust_* 2>/dev/null || true
-    rm -f "$OUT_DIR"/*.ll 2>/dev/null || true
-    echo "Build timing: clean"
-    build_all 1
+    TRIALS="${BENCH_BUILD_TRIALS:-7}"
 
-    # Incremental build timing: force a minimal rebuild by touching a single
-    # representative benchmark source for each language.
-    echo "Build timing: incremental (touch protocol)"
-    if [[ "$BENCH_SET" == "fswalk" ]]; then
-        touch "$ROOT/aster/bench/fswalk/fswalk.as" "$ROOT/aster/bench/fswalk/cpp.cpp" "$ROOT/aster/bench/fswalk/rust.rs"
-    else
-        touch "$ROOT/aster/bench/dot/dot.as" "$ROOT/aster/bench/dot/cpp.cpp" "$ROOT/aster/bench/dot/rust.rs"
-    fi
-    build_all 1
+    collect_build_stats() {
+        local stage="$1" # clean|incremental
+        local aster_ns_list=()
+        local cpp_ns_list=()
+        local rust_ns_list=()
+        local asterc_ns_list=()
+        local clang_ns_list=()
+
+        for t in $(seq 1 "$TRIALS"); do
+            if [[ "$stage" == "clean" ]]; then
+                rm -f "$OUT_DIR"/aster_* "$OUT_DIR"/cpp_* "$OUT_DIR"/rust_* 2>/dev/null || true
+                rm -f "$OUT_DIR"/*.ll 2>/dev/null || true
+            else
+                # Force a minimal rebuild via deterministic mtime bumps so `-nt`
+                # checks don't accidentally no-op on coarse timestamp filesystems.
+                if [[ "$BENCH_SET" == "fswalk" ]]; then
+                    bump_mtime "$ROOT/aster/bench/fswalk/fswalk.as"
+                    bump_mtime "$ROOT/aster/bench/fswalk/cpp.cpp"
+                    bump_mtime "$ROOT/aster/bench/fswalk/rust.rs"
+                else
+                    bump_mtime "$ROOT/aster/bench/dot/dot.as"
+                    bump_mtime "$ROOT/aster/bench/dot/cpp.cpp"
+                    bump_mtime "$ROOT/aster/bench/dot/rust.rs"
+                fi
+            fi
+
+            line="$(build_all 1)"
+            local aster_ns=0 cpp_ns=0 rust_ns=0 asterc_ns=0 clang_ns=0
+            for kv in $line; do
+                case "$kv" in
+                    aster_ns=*) aster_ns="${kv#aster_ns=}" ;;
+                    cpp_ns=*) cpp_ns="${kv#cpp_ns=}" ;;
+                    rust_ns=*) rust_ns="${kv#rust_ns=}" ;;
+                    asterc_ns=*) asterc_ns="${kv#asterc_ns=}" ;;
+                    clang_ns=*) clang_ns="${kv#clang_ns=}" ;;
+                esac
+            done
+
+            aster_ns_list+=("$aster_ns")
+            cpp_ns_list+=("$cpp_ns")
+            rust_ns_list+=("$rust_ns")
+            asterc_ns_list+=("$asterc_ns")
+            clang_ns_list+=("$clang_ns")
+        done
+
+        ASTER_NS_LIST="$(IFS=,; echo "${aster_ns_list[*]}")" \
+        CPP_NS_LIST="$(IFS=,; echo "${cpp_ns_list[*]}")" \
+        RUST_NS_LIST="$(IFS=,; echo "${rust_ns_list[*]}")" \
+        ASTERC_NS_LIST="$(IFS=,; echo "${asterc_ns_list[*]}")" \
+        CLANG_NS_LIST="$(IFS=,; echo "${clang_ns_list[*]}")" \
+        python3 - <<'PY'
+import os
+import statistics
+
+def parse_csv(name: str):
+    s = os.environ.get(name, "")
+    vals = [int(x) for x in s.split(",") if x.strip()]
+    if not vals:
+        return [0]
+    return vals
+
+def stats(vals):
+    med = statistics.median(vals)
+    sd = statistics.stdev(vals) if len(vals) > 1 else 0.0
+    return med, sd
+
+def fmt_s(ns, decimals=3):
+    return f"{ns/1e9:.{decimals}f}s"
+
+def fmt_ms(ns):
+    return f"{ns/1e6:.3f}ms"
+
+aster = parse_csv("ASTER_NS_LIST")
+cpp = parse_csv("CPP_NS_LIST")
+rust = parse_csv("RUST_NS_LIST")
+astc = parse_csv("ASTERC_NS_LIST")
+clang = parse_csv("CLANG_NS_LIST")
+
+am, asd = stats(aster)
+cm, csd = stats(cpp)
+rm, rsd = stats(rust)
+astm, astsd = stats(astc)
+clm, clsd = stats(clang)
+
+print(f"- aster: median {fmt_s(am)}  stdev {fmt_s(asd)}  breakdown: asterc {fmt_ms(astm)} (sd {fmt_ms(astsd)}), clang {fmt_ms(clm)} (sd {fmt_ms(clsd)})")
+print(f"- cpp:   median {fmt_s(cm)}  stdev {fmt_s(csd)}")
+print(f"- rust:  median {fmt_s(rm)}  stdev {fmt_s(rsd)}")
+PY
+    }
+
+    echo "Build timing: clean (trials=$TRIALS)"
+    collect_build_stats clean
+    echo ""
+
+    echo "Build timing: incremental (touch protocol, trials=$TRIALS)"
+    collect_build_stats incremental
+    echo ""
 else
     build_all 0
 fi
@@ -348,6 +521,15 @@ def _env_int(*keys: str, default: int) -> int:
 
 FSWALK_RUNS = _env_int("FS_BENCH_IO_RUNS", "FS_BENCH_FSWALK_RUNS", default=7)
 FSWALK_WARMUP = _env_int("FS_BENCH_IO_WARMUP", "FS_BENCH_FSWALK_WARMUP", default=1)
+
+print("Bench config:")
+print(f"- BENCH_SET: {bench_set}")
+if only:
+    print(f"- BENCH_ONLY: {only}")
+print(f"- benches: {', '.join(benches)}")
+print(f"- kernels: runs={RUNS} warmup={WARMUP}")
+print(f"- fs: runs={FSWALK_RUNS} warmup={FSWALK_WARMUP}")
+print("")
 
 bins = {
     "aster": os.path.join(os.environ.get("BENCH_OUT_DIR", "./tools/bench/out"), "aster_{}"),
@@ -403,6 +585,8 @@ for bi, bench_name in enumerate(benches):
         tpl = bins[lang]
         env = os.environ.copy()
         if bench_name == "fswalk":
+            if "FS_BENCH_CPP_MODE" not in env:
+                env["FS_BENCH_CPP_MODE"] = "fts"
             list_path = env.get("FS_BENCH_LIST_PATH") or env.get("FS_BENCH_LIST")
             if list_path:
                 env["FS_BENCH_LIST"] = list_path

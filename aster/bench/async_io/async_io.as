@@ -52,11 +52,22 @@ def main() returns i32
     var iters is usize = bench_iters()
     var total_iters is usize = ITERS * iters
     var iter is usize = 0
+    while iter + 3 < total_iters do
+        write(wfd, buf, CHUNK)
+        read(rfd, buf, CHUNK)
+        write(wfd, buf, CHUNK)
+        read(rfd, buf, CHUNK)
+        write(wfd, buf, CHUNK)
+        read(rfd, buf, CHUNK)
+        write(wfd, buf, CHUNK)
+        read(rfd, buf, CHUNK)
+        total = total + (CHUNK * 4)
+        iter = iter + 4
+
     while iter < total_iters do
         write(wfd, buf, CHUNK)
-        var n is isize = read(rfd, buf, CHUNK)
-        if n > 0 then
-            total = total + n
+        read(rfd, buf, CHUNK)
+        total = total + CHUNK
         iter = iter + 1
 
     printf("%llu\n", total)

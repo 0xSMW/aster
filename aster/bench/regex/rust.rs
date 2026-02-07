@@ -1,28 +1,9 @@
 const N: usize = 1_000_000;
 const LCG_A: u64 = 6364136223846793005;
 const LCG_C: u64 = 1;
-
-fn count_matches(buf: &[u8]) -> u64 {
-    let mut count: u64 = 0;
-    let len = buf.len();
-    let mut i: usize = 0;
-    while i < len {
-        if buf[i] == b'a' {
-            let mut j = i + 1;
-            while j < len && buf[j] == b'b' {
-                j += 1;
-            }
-            if j < len && buf[j] == b'c' {
-                count += 1;
-            }
-        }
-        i += 1;
-    }
-    count
-}
+const LUT_PACK: u32 = 0x7863_6261; // bytes: 'a','b','c','x' (little-endian)
 
 fn main() {
-    let mut buf = vec![0u8; N];
     let iters: usize = std::env::var("BENCH_ITERS")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
@@ -32,18 +13,24 @@ fn main() {
     let mut total: u64 = 0;
     for _ in 0..iters {
         let mut seed: u64 = 1;
-        for i in 0..N {
+        let mut matches: u64 = 0;
+        let mut state: u8 = 0; // 0 = seek 'a'; 1 = after 'a' (consume b* then expect 'c' for a match).
+        for _ in 0..N {
             seed = seed.wrapping_mul(LCG_A).wrapping_add(LCG_C);
-            let r = ((seed >> 32) & 3) as u8;
-            let ch = match r {
-                0 => b'a',
-                1 => b'b',
-                2 => b'c',
-                _ => b'x',
-            };
-            buf[i] = ch;
+            let r = ((seed >> 32) & 3) as u32;
+            let ch = ((LUT_PACK >> (r << 3)) & 255) as u8;
+            if state == 0 {
+                if ch == b'a' {
+                    state = 1;
+                }
+            } else if ch == b'c' {
+                matches = matches.wrapping_add(1);
+                state = 0;
+            } else if ch == b'x' {
+                state = 0;
+            }
         }
-        total = total.wrapping_add(count_matches(&buf));
+        total = total.wrapping_add(matches);
     }
     println!("{}", total);
 }

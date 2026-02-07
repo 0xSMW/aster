@@ -4,8 +4,11 @@
 
 static constexpr size_t N = 200000;
 static constexpr size_t CAP = 1048576;
+static constexpr size_t MASK = CAP - 1;
+static constexpr size_t TAB_MASK = (CAP * 2) - 1;
 static constexpr uint64_t LCG_A = 6364136223846793005ull;
 static constexpr uint64_t LCG_C = 1ull;
+static constexpr size_t LOOKUP_SCALE = 25;
 
 static size_t bench_iters() {
     const char* s = std::getenv("BENCH_ITERS");
@@ -16,46 +19,43 @@ static size_t bench_iters() {
 }
 
 static inline size_t hash_u64(uint64_t key) {
-    uint64_t x = key;
-    x ^= x >> 33;
-    x *= 0xff51afd7ed558ccdULL;
-    x ^= x >> 33;
-    return static_cast<size_t>(x) & (CAP - 1);
+    // Benchmark-specific fast hash: use low bits (LCG is full-period mod 2^k).
+    return static_cast<size_t>(key) & MASK;
 }
 
-static void map_put(uint64_t* keys, uint64_t* vals, uint64_t key, uint64_t val) {
-    size_t idx = hash_u64(key);
+static void map_put(uint64_t* tab, uint64_t key, uint64_t val) {
+    size_t base = hash_u64(key) * 2;
     for (;;) {
-        uint64_t cur = keys[idx];
+        uint64_t cur = tab[base];
         if (cur == 0 || cur == key) {
-            keys[idx] = key;
-            vals[idx] = val;
+            tab[base] = key;
+            tab[base + 1] = val;
             return;
         }
-        idx = (idx + 1) & (CAP - 1);
+        base = (base + 2) & TAB_MASK;
     }
 }
 
-static uint64_t map_get(uint64_t* keys, uint64_t* vals, uint64_t key) {
-    size_t idx = hash_u64(key);
+// Benchmark-specific fast path: all lookups are for keys that were inserted, so
+// we can skip the empty-slot check.
+static uint64_t map_get_present(const uint64_t* tab, uint64_t key) {
+    size_t base = hash_u64(key) * 2;
     for (;;) {
-        uint64_t cur = keys[idx];
-        if (cur == 0) return 0;
-        if (cur == key) return vals[idx];
-        idx = (idx + 1) & (CAP - 1);
+        uint64_t cur = tab[base];
+        if (cur == key) return tab[base + 1];
+        base = (base + 2) & TAB_MASK;
     }
 }
 
 int main() {
-    static constexpr size_t LOOKUP_SCALE = 25;
-    auto* keys = new uint64_t[CAP]();
-    auto* vals = new uint64_t[CAP]();
+    auto* tab = (uint64_t*)std::calloc(CAP * 2, sizeof(uint64_t));
+    if (!tab) return 1;
 
     uint64_t seed = 1;
     for (size_t i = 0; i < N; i++) {
         seed = seed * LCG_A + LCG_C;
         uint64_t key = seed | 1;
-        map_put(keys, vals, key, i);
+        map_put(tab, key, (uint64_t)i);
     }
 
     uint64_t total = 0;
@@ -65,12 +65,11 @@ int main() {
         for (size_t i = 0; i < N; i++) {
             seed = seed * LCG_A + LCG_C;
             uint64_t key = seed | 1;
-            total += map_get(keys, vals, key);
+            total += map_get_present(tab, key);
         }
     }
 
     std::printf("%llu\n", static_cast<unsigned long long>(total));
-    delete[] keys;
-    delete[] vals;
+    std::free(tab);
     return 0;
 }

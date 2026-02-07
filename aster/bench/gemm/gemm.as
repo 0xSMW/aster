@@ -1,6 +1,7 @@
 # Aster GEMM benchmark (Aster0 subset)
 
 const N is usize = 128
+const N32 is i32 = 128
 const REPS is usize = 2
 const CBLAS_ROW_MAJOR is i32 = 101
 const CBLAS_NO_TRANS is i32 = 111
@@ -45,7 +46,7 @@ def main() returns i32
     var rep is usize = 0
     while rep < total_reps do
         # Use optimized BLAS (Accelerate) for GEMM.
-        cblas_dgemm(CBLAS_ROW_MAJOR, CBLAS_NO_TRANS, CBLAS_NO_TRANS, N, N, N, 1.0, a, N, b, N, 0.0, c, N)
+        cblas_dgemm(CBLAS_ROW_MAJOR, CBLAS_NO_TRANS, CBLAS_NO_TRANS, N32, N32, N32, 1.0, a, N32, b, N32, 0.0, c, N32)
         rep = rep + 1
 
     printf("%f\n", c[0])

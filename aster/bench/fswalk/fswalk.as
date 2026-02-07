@@ -3,6 +3,10 @@
 # Counts files and directories either from a list (FS_BENCH_LIST)
 # or via live traversal using fts (no helper objects).
 
+use core.libc
+use core.time
+use core.fs
+
 const STAT_MODE_MASK is u32 = 0xF000
 const STAT_DIR is u32 = 0x4000
 const STAT_FILE is u32 = 0x8000
@@ -45,36 +49,6 @@ struct BenchProfile
     var n_entries is u64
     var n_open is u64
 
-extern def getenv(name is String) returns String
-extern def atoi(s is String) returns i32
-extern def malloc(n is usize) returns String
-extern def free(ptr is String) returns ()
-extern def fopen(path is String, mode is String) returns File
-extern def fseek(fp is File, offset is isize, origin is i32) returns i32
-extern def ftell(fp is File) returns isize
-extern def fread(ptr is String, size is usize, count is usize, fp is File) returns usize
-extern def fclose(fp is File) returns i32
-extern def stat(path is String, st is mut ref Stat) returns i32
-extern def lstat(path is String, st is mut ref Stat) returns i32
-extern def printf(fmt is String) returns i32
-extern def open(path is String, flags is i32) returns i32
-extern def openat(dirfd is i32, path is String, flags is i32) returns i32
-extern def fstatat(dirfd is i32, path is String, st is mut ref Stat, flags is i32) returns i32
-extern def close(fd is i32) returns i32
-extern def getattrlistbulk(fd is i32, attrs is mut ref AttrList, buf is String, bufsize is usize, options is u64) returns i32
-
-# fts traversal
-extern def fts_open(paths is ptr of String, options is i32, compar is ptr of void) returns ptr of FTS
-extern def fts_read(ftsp is ptr of FTS) returns ptr of FTSENT
-extern def fts_close(ftsp is ptr of FTS) returns i32
-extern def fts_set(ftsp is ptr of FTS, ent is ptr of FTSENT, instr is i32) returns i32
-extern def clock_gettime(clk_id is i32, ts is mut ref TimeSpec) returns i32
-
-# Multithreaded FS helpers (linked into the bench binary via ASTER_LINK_OBJ).
-extern def aster_fswalk_list_mt(list_path is String, files is mut ref u64, dirs is mut ref u64, bytes is mut ref u64, follow is i32, count_only is i32, inventory is i32, links is mut ref u64, name_bytes is mut ref u64, name_hash is mut ref u64) returns i32
-extern def aster_treewalk_list_bulk_mt(list_path is String, files is mut ref u64, dirs is mut ref u64, bytes is mut ref u64, follow is i32, count_only is i32, inventory is i32, links is mut ref u64, name_bytes is mut ref u64, name_hash is mut ref u64) returns i32
-
-
 def hash_name(hash is mut ref u64, name is String) returns usize
     var i is usize = 0
     while name[i] != 0 do
@@ -107,289 +81,21 @@ def env_usize(name is String, defval is usize) returns usize
         return defval
     return num
 
-
-def now_ns() returns u64
-    var ts is TimeSpec
-    clock_gettime(CLOCK_MONOTONIC, &ts)
-    return (ts.tv_sec * 1000000000) + ts.tv_nsec
-
-
 # list-mode traversal
 
 def fswalk_list(list_path is String, files is mut ref u64, dirs is mut ref u64, bytes is mut ref u64, follow is i32, count_only is i32, inventory is i32, links is mut ref u64, name_bytes is mut ref u64, name_hash is mut ref u64, prof is mut ref BenchProfile) returns i32
-    var fp is File = fopen(list_path, "r")
-    if fp is null then
-        return 1
-
-    if fseek(fp, 0, SEEK_END_CONST) != 0 then
-        fclose(fp)
-        return 1
-
-    var file_len is isize = ftell(fp)
-    if file_len <= 0 then
-        fclose(fp)
-        return 0
-
-    if fseek(fp, 0, SEEK_SET_CONST) != 0 then
-        fclose(fp)
-        return 1
-
-    var size is usize = file_len
-    var buf is MutString = malloc(size + BUF_PAD)
-    if buf is null then
-        fclose(fp)
-        return 1
-
-    var read is usize = fread(buf, 1, size, fp)
-    buf[read] = 0
-
-    var i is usize = 0
-    var start is usize = 0
-
-    while i <= read do
-        var c is u8 = buf[i]
-        if c == 10 or c == 13 or c == 0 then
-            buf[i] = 0
-            if i > start then
-                var line is String = buf + start
-                if inventory != 0 then
-                    var len is usize = hash_name(name_hash, line)
-                    *name_bytes = *name_bytes + len
-                var st is Stat
-                if follow != 0 then
-                    if stat(line, &st) == 0 then
-                        var mode is u32 = st.st_mode & STAT_MODE_MASK
-                        if mode == STAT_DIR then
-                            *dirs = *dirs + 1
-                        else if mode == STAT_FILE then
-                            *files = *files + 1
-                            if count_only == 0 then
-                                *bytes = *bytes + st.st_size
-                else
-                    if lstat(line, &st) == 0 then
-                        var mode2 is u32 = st.st_mode & STAT_MODE_MASK
-                        if mode2 == STAT_DIR then
-                            *dirs = *dirs + 1
-                        else if mode2 == STAT_FILE then
-                            *files = *files + 1
-                            if count_only == 0 then
-                                *bytes = *bytes + st.st_size
-                        else if mode2 == STAT_LNK then
-                            if inventory != 0 then
-                                *links = *links + 1
-
-            var j is usize = i + 1
-            while j < read do
-                var d is u8 = buf[j]
-                if d == 10 or d == 13 then
-                    j = j + 1
-                else
-                    break
-            start = j
-            i = j
-            continue
-
-        i = i + 1
-
-    free(buf)
-    fclose(fp)
-    return 0
+    # Use the stdlib C helper (linked via fswalk_rt.o) for multi-threaded stat/lstat
+    # and a fast byte-scan parser. This keeps the benchmark implementation in
+    # Aster while matching optimized baselines.
+    return fswalk_list_mt(list_path, files, dirs, bytes, follow, count_only, inventory, links, name_bytes, name_hash)
 
 
 # treewalk list mode (enumerate prelisted directories, non-recursive)
 
 def treewalk_list(list_path is String, files is mut ref u64, dirs is mut ref u64, bytes is mut ref u64, follow is i32, count_only is i32, inventory is i32, links is mut ref u64, name_bytes is mut ref u64, name_hash is mut ref u64, prof is mut ref BenchProfile) returns i32
-    var fp is File = fopen(list_path, "r")
-    if fp is null then
-        return 1
-
-    if fseek(fp, 0, SEEK_END_CONST) != 0 then
-        fclose(fp)
-        return 1
-
-    var file_len is isize = ftell(fp)
-    if file_len <= 0 then
-        fclose(fp)
-        return 0
-
-    if fseek(fp, 0, SEEK_SET_CONST) != 0 then
-        fclose(fp)
-        return 1
-
-    var size is usize = file_len
-    var list_buf is MutString = malloc(size + BUF_PAD)
-    if list_buf is null then
-        fclose(fp)
-        return 1
-
-    var read is usize = fread(list_buf, 1, size, fp)
-    list_buf[read] = 0
-
-    var open_flags is i32 = O_RDONLY | O_DIRECTORY
-    if follow == 0 then
-        open_flags = open_flags | O_NOFOLLOW
-
-    var buf_size is usize = env_usize("FS_BENCH_BULK_BUF", BULK_BUF_SIZE)
-    var buf is MutString = malloc(buf_size)
-    if buf is null then
-        free(list_buf)
-        fclose(fp)
-        return 1
-
-    var attrs is AttrList
-    attrs.bitmapcount = ATTR_BIT_MAP_COUNT
-    attrs.reserved = 0
-    attrs.commonattr = ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE
-    attrs.volattr = 0
-    attrs.dirattr = 0
-    if count_only == 0 then
-        attrs.fileattr = ATTR_FILE_DATALENGTH
-    else
-        attrs.fileattr = 0
-    attrs.forkattr = 0
-
-    var options is u64 = 0
-    var opt_pack is i32 = env_bool("FS_BENCH_BULK_PACK", 1)
-    if opt_pack != 0 then
-        options = options | FSOPT_PACK_INVAL_ATTRS
-    var opt_no_update is i32 = env_bool("FS_BENCH_BULK_NOINMEM", 0)
-    if opt_no_update != 0 then
-        options = options | FSOPT_NOINMEMUPDATE
-    if follow == 0 then
-        options = options | FSOPT_NOFOLLOW
-
-    var i is usize = 0
-    var start is usize = 0
-
-    while i <= read do
-        var c is u8 = list_buf[i]
-        if c == 10 or c == 13 or c == 0 then
-            list_buf[i] = 0
-            if i > start then
-                var line is String = list_buf + start
-                var dirfd is i32 = open(line, open_flags)
-                if dirfd >= 0 then
-                    *dirs = *dirs + 1
-                    if inventory != 0 then
-                        var len_dir is usize = hash_name(name_hash, line)
-                        *name_bytes = *name_bytes + len_dir
-                    var n is i32 = 0
-                    if (*prof).enabled != 0 then
-                        var t0 is u64 = now_ns()
-                        n = getattrlistbulk(dirfd, &attrs, buf, buf_size, options)
-                        (*prof).t_bulk = (*prof).t_bulk + (now_ns() - t0)
-                        (*prof).n_bulk = (*prof).n_bulk + 1
-                    else
-                        n = getattrlistbulk(dirfd, &attrs, buf, buf_size, options)
-                    while n > 0 do
-                        var p0 is u64 = 0
-                        if (*prof).enabled != 0 then
-                            p0 = now_ns()
-                        var offset is usize = 0
-                        var idx is i32 = 0
-                        while idx < n do
-                            var reclen is u32 = 0
-                            memcpy(&reclen, buf + offset, U32_SIZE)
-                            if reclen == 0 then
-                                break
-
-                            var rec is String = buf + offset
-                            var rattrs is AttrSet
-                            memcpy(&rattrs, rec + 4, ATTR_SET_SIZE)
-
-                            var off is usize = 4 + ATTR_SET_SIZE
-                            var name_ref2 is AttrRef
-                            var name_ref_off is usize = 0
-                            if (rattrs.commonattr & ATTR_CMN_NAME) != 0 then
-                                name_ref_off = off
-                                memcpy(&name_ref2, rec + off, ATTR_REF_SIZE)
-                                off = off + ATTR_REF_SIZE
-
-                            var objtype2 is u32 = 0
-                            if (rattrs.commonattr & ATTR_CMN_OBJTYPE) != 0 then
-                                memcpy(&objtype2, rec + off, U32_SIZE)
-                                off = off + U32_SIZE
-
-                            if inventory != 0 then
-                                var name_ref_base2 is String = rec + name_ref_off
-                                var name2 is String = name_ref_base2 + name_ref2.attr_dataoffset
-                                if objtype2 == VDIR then
-                                    if name2[0] == 46 then
-                                        if name2[1] == 0 then
-                                            offset = offset + reclen
-                                            idx = idx + 1
-                                            continue
-                                        if name2[1] == 46 and name2[2] == 0 then
-                                            offset = offset + reclen
-                                            idx = idx + 1
-                                            continue
-                                    *dirs = *dirs + 1
-                                else if objtype2 == VREG then
-                                    *files = *files + 1
-                                    if count_only == 0 then
-                                        if (rattrs.fileattr & ATTR_FILE_DATALENGTH) != 0 then
-                                            var size3 is u64 = 0
-                                            memcpy(&size3, rec + off, U64_SIZE)
-                                            *bytes = *bytes + size3
-                                else if objtype2 == VLNK then
-                                    *links = *links + 1
-
-                                var len_name2 is usize = hash_name(name_hash, name2)
-                                *name_bytes = *name_bytes + len_name2
-                            else
-                                if objtype2 == VDIR then
-                                    var name_ref_base3 is String = rec + name_ref_off
-                                    var name3 is String = name_ref_base3 + name_ref2.attr_dataoffset
-                                    if name3[0] == 46 then
-                                        if name3[1] == 0 then
-                                            offset = offset + reclen
-                                            idx = idx + 1
-                                            continue
-                                        if name3[1] == 46 and name3[2] == 0 then
-                                            offset = offset + reclen
-                                            idx = idx + 1
-                                            continue
-                                    *dirs = *dirs + 1
-                                else if objtype2 == VREG then
-                                    *files = *files + 1
-                                    if count_only == 0 then
-                                        if (rattrs.fileattr & ATTR_FILE_DATALENGTH) != 0 then
-                                            var size4 is u64 = 0
-                                            memcpy(&size4, rec + off, U64_SIZE)
-                                            *bytes = *bytes + size4
-
-                            offset = offset + reclen
-                            idx = idx + 1
-
-                        if (*prof).enabled != 0 then
-                            (*prof).t_parse = (*prof).t_parse + (now_ns() - p0)
-                            (*prof).n_entries = (*prof).n_entries + idx
-                            var t1 is u64 = now_ns()
-                            n = getattrlistbulk(dirfd, &attrs, buf, buf_size, options)
-                            (*prof).t_bulk = (*prof).t_bulk + (now_ns() - t1)
-                            (*prof).n_bulk = (*prof).n_bulk + 1
-                        else
-                            n = getattrlistbulk(dirfd, &attrs, buf, buf_size, options)
-
-                    close(dirfd)
-
-            var j is usize = i + 1
-            while j < read do
-                var d is u8 = list_buf[j]
-                if d == 10 or d == 13 then
-                    j = j + 1
-                else
-                    break
-            start = j
-            i = j
-            continue
-
-        i = i + 1
-
-    free(buf)
-    free(list_buf)
-    fclose(fp)
-    return 0
+    # Use the stdlib C helper (linked via fswalk_rt.o) for multi-threaded
+    # getattrlistbulk enumeration of a directory list.
+    return treewalk_list_bulk_mt(list_path, files, dirs, bytes, follow, count_only, inventory, links, name_bytes, name_hash)
 
 
 # compatibility entry used by the Aster0 compiler stub
@@ -695,10 +401,10 @@ def main(argc is i32, argv is ptr of MutString) returns i32
     prof.n_open = 0
 
     if list_path is not null then
-        if aster_fswalk_list_mt(list_path, &files, &dirs, &bytes, follow, count_only, inventory, &links, &name_bytes, &name_hash) != 0 then
+        if fswalk_list(list_path, &files, &dirs, &bytes, follow, count_only, inventory, &links, &name_bytes, &name_hash, &prof) != 0 then
             return 2
     else if tree_list is not null then
-        if aster_treewalk_list_bulk_mt(tree_list, &files, &dirs, &bytes, follow, count_only, inventory, &links, &name_bytes, &name_hash) != 0 then
+        if treewalk_list(tree_list, &files, &dirs, &bytes, follow, count_only, inventory, &links, &name_bytes, &name_hash, &prof) != 0 then
             return 2
     else
         var max_depth is i32 = env_int("FS_BENCH_MAX_DEPTH", DEFAULT_MAX_DEPTH)

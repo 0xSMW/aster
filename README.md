@@ -26,12 +26,8 @@ Aster targets the gap between languages that are pleasant to write and languages
 
 Benchmark history is tracked in [`BENCH.md`](BENCH.md).
 
-Note: legacy runs in `BENCH.md` were produced before the repo enforced the
-"no compiler shims" policy (compile Aster source with the real `asterc`, no
-transpilers/templates). They are useful as historical exploration but are not
-authoritative. Once the real `asterc` exists and compiles `.as` source into the
-benchmark binaries, we will restart benchmarking and hill-climb toward the
-updated goalpost (+5-15% faster than best-of C++/Rust).
+Note: `BENCH.md` includes a "real `asterc`" epoch where all benchmarks are
+compiled from `.as` source by `tools/build/out/asterc` (no shims/templates).
 
 ## Language Overview
 
@@ -167,6 +163,14 @@ aster/
 - Clang (Apple Clang 17+ or LLVM Clang)
 - Rust toolchain (for baseline benchmarks only)
 
+### Install (Optional)
+
+Install `aster`, `asterc`, and `asterfmt` to a prefix (default `$HOME/.local`):
+
+```bash
+bash tools/release/install.sh --prefix "$HOME/.local"
+```
+
 ### Running Benchmarks
 
 Kernel benchmarks (compute-bound):
@@ -199,10 +203,10 @@ Results are written to `$BENCH_OUT_DIR` (default: `.context/bench/out`).
 ### Compiling Aster Source
 
 Benchmarks and programs must be compiled from `.as` source by the real Aster
-compiler (`asterc`), implemented in assembly (work in progress; see `INIT.md`).
+compiler (`asterc`).
 
 ```bash
-# Build the compiler (once `asm/driver/asterc.S` exists)
+# Build the compiler
 tools/build/build.sh asm/driver/asterc.S   # -> tools/build/out/asterc
 
 # Compile a program
