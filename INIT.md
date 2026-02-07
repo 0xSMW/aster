@@ -35,26 +35,26 @@ Legend: [x] done, [ ] todo, [~] in progress
 
 ### 2) Benchmark Suite (sources + harness)
 - [ ] Implement fswalk list replay with no helper objects (pure Aster + libc).
-- [ ] Align fswalk list parsing across Aster/C++/Rust with raw byte scan.
-- [ ] Split benchmark runs (kernels vs fswalk) to reduce cache interference.
-- [ ] Add fixed fswalk dataset + metadata for repeatable runs.
-- [ ] Add treewalk benchmark (live traversal) alongside fswalk list mode.
-- [ ] Implement fswalk live traversal in Aster via fts (no helpers).
+- [x] Align fswalk list parsing across Aster/C++/Rust with raw byte scan.
+- [x] Split benchmark runs (kernels vs fswalk) to reduce cache interference.
+- [x] Add fixed fswalk dataset + metadata for repeatable runs.
+- [x] Add treewalk benchmark (live traversal) alongside fswalk list mode.
+- [x] Implement fswalk live traversal in Aster via fts (no helpers).
 - [ ] Force C++ fswalk traversal to fts in harness for apples-to-apples.
-- [ ] Add C++ treewalk bulk mode and align harness defaults with Aster bulk.
-- [ ] Add treewalk bulk mode using getattrlistbulk (Aster-only, no helpers).
-- [ ] Add treewalk bulk file sizes via ATTR_FILE_DATALENGTH (no per-file fstatat).
-- [ ] Add treewalk bulk buffer override (FS_BENCH_BULK_BUF).
-- [ ] Increase treewalk bulk buffer default to 8 MiB (FS_BENCH_BULK_BUF).
-- [ ] Expand benchmark suite (JSON, regex, sort, hashmap, async IO, fs benches).
-- [ ] Add dircount benchmark (live traversal count-only).
-- [ ] Add fsinventory benchmark (live traversal inventory: files/dirs/symlinks + name hash).
-- [ ] Bench harness: record `sha256/bytes/lines` for fixed fswalk/treewalk datasets (stricter comparisons).
-- [ ] Add benchmark variance tracking (N runs, stddev, cache-state notes).
-- [ ] Add benchmark isolation modes to CLI (kernels vs IO benches).
-- [ ] Stabilize fswalk dataset sizing (configurable list size + repeatability checks).
-- [ ] Benchmark harness: C++/Rust baselines + suite scoring (median, win-rate, geomean).
-- [ ] Tune/optimize benchmark sources (kernel-level Aster code).
+- [x] Add C++ treewalk bulk mode and align harness defaults with Aster bulk.
+- [x] Add treewalk bulk mode using getattrlistbulk (Aster-only, no helpers).
+- [x] Add treewalk bulk file sizes via ATTR_FILE_DATALENGTH (no per-file fstatat).
+- [x] Add treewalk bulk buffer override (FS_BENCH_BULK_BUF).
+- [x] Increase treewalk bulk buffer default to 8 MiB (FS_BENCH_BULK_BUF).
+- [x] Expand benchmark suite (JSON, regex, sort, hashmap, async IO, fs benches).
+- [x] Add dircount benchmark (live traversal count-only).
+- [x] Add fsinventory benchmark (live traversal inventory: files/dirs/symlinks + name hash).
+- [x] Bench harness: record `sha256/bytes/lines` for fixed fswalk/treewalk datasets (stricter comparisons).
+- [x] Add benchmark variance tracking (N runs, stddev, cache-state notes).
+- [x] Add benchmark isolation modes to CLI (kernels vs IO benches).
+- [x] Stabilize fswalk dataset sizing (configurable list size + repeatability checks).
+- [x] Benchmark harness: C++/Rust baselines + suite scoring (median, win-rate, geomean).
+- [x] Tune/optimize benchmark sources (kernel-level Aster code).
 
 ### 3) Compiler MVP: `asterc` (real; bench-complete subset)
 - [x] Aster1(MVP): define the bench-complete language subset (syntax + semantics + ABI) with examples + tests.
