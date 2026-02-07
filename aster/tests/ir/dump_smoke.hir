@@ -1,0 +1,22 @@
+aster_hir v1
+funcs 20
+func printf ir=@printf mod=0 extern=1 noalloc=0
+func write ir=@write mod=0 extern=1 noalloc=0
+func strlen ir=@strlen mod=0 extern=1 noalloc=0
+func exit ir=@exit mod=0 extern=1 noalloc=0
+func fopen ir=@fopen mod=0 extern=1 noalloc=0
+func fseek ir=@fseek mod=0 extern=1 noalloc=0
+func ftell ir=@ftell mod=0 extern=1 noalloc=0
+func fread ir=@fread mod=0 extern=1 noalloc=0
+func fclose ir=@fclose mod=0 extern=1 noalloc=0
+func malloc ir=@malloc mod=0 extern=1 noalloc=0
+func free ir=@free mod=0 extern=1 noalloc=0
+func getenv ir=@getenv mod=0 extern=1 noalloc=0
+func atoi ir=@atoi mod=0 extern=1 noalloc=0
+func clock_gettime ir=@clock_gettime mod=0 extern=1 noalloc=0
+func backtrace ir=@backtrace mod=0 extern=1 noalloc=0
+func backtrace_symbols_fd ir=@backtrace_symbols_fd mod=0 extern=1 noalloc=0
+func println ir=@aster_core_io__println mod=1 extern=0 noalloc=0
+func print_u64 ir=@aster_core_io__print_u64 mod=1 extern=0 noalloc=0
+func add ir=@aster_aster_tests_ir_dump_smoke__add mod=2 extern=0 noalloc=0
+func main ir=@main mod=2 extern=0 noalloc=0

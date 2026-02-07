@@ -1,0 +1,61 @@
+aster_ast v1
+file_modules 3
+module 0 name=core.libc path=src/core/libc.as
+module 1 name=core.io path=src/core/io.as
+  use core.libc
+module 2 name=aster.tests.ir.dump_smoke path=aster/tests/ir/dump_smoke.as
+  use core.io
+structs 8
+struct PollFd mod=0 size=8 align=4 fields=3
+  field fd off=0 ty=i32
+  field events off=4 ty=i16
+  field revents off=6 ty=i16
+struct TimeSpec mod=0 size=16 align=8 fields=2
+  field tv_sec off=0 ty=i64
+  field tv_nsec off=8 ty=i64
+struct Stat mod=0 size=144 align=8 fields=2
+  field st_mode off=4 ty=u16
+  field st_size off=96 ty=i64
+struct AttrList mod=0 size=24 align=4 fields=7
+  field bitmapcount off=0 ty=u16
+  field reserved off=2 ty=u16
+  field commonattr off=4 ty=u32
+  field volattr off=8 ty=u32
+  field dirattr off=12 ty=u32
+  field fileattr off=16 ty=u32
+  field forkattr off=20 ty=u32
+struct AttrRef mod=0 size=8 align=4 fields=2
+  field attr_dataoffset off=0 ty=i32
+  field attr_length off=4 ty=u32
+struct FTS mod=0 size=8 align=8 fields=0
+struct FTSENT mod=0 size=112 align=8 fields=4
+  field fts_path off=48 ty=mut ref u8
+  field fts_level off=86 ty=i16
+  field fts_info off=88 ty=u16
+  field fts_statp off=96 ty=mut ref Stat
+struct Pair mod=2 size=8 align=4 fields=2
+  field a off=0 ty=i32
+  field b off=4 ty=i32
+consts 1
+const ANSWER mod=2 ty=i32 kind=0 u=42
+funcs 20
+func printf mod=0 extern=1 noalloc=0 ret=i32 params=1 fmt:mut ref u8
+func write mod=0 extern=1 noalloc=0 ret=i64 params=3 fd:i32 buf:mut ref u8 n:u64
+func strlen mod=0 extern=1 noalloc=0 ret=u64 params=1 s:mut ref u8
+func exit mod=0 extern=1 noalloc=0 ret=void params=1 code:i32
+func fopen mod=0 extern=1 noalloc=0 ret=ref void params=2 path:mut ref u8 mode:mut ref u8
+func fseek mod=0 extern=1 noalloc=0 ret=i32 params=3 fp:ref void offset:i64 origin:i32
+func ftell mod=0 extern=1 noalloc=0 ret=i64 params=1 fp:ref void
+func fread mod=0 extern=1 noalloc=0 ret=u64 params=4 ptr:mut ref u8 size:u64 count:u64 fp:ref void
+func fclose mod=0 extern=1 noalloc=0 ret=i32 params=1 fp:ref void
+func malloc mod=0 extern=1 noalloc=0 ret=mut ref u8 params=1 n:u64
+func free mod=0 extern=1 noalloc=0 ret=void params=1 ptr:mut ref u8
+func getenv mod=0 extern=1 noalloc=0 ret=mut ref u8 params=1 name:mut ref u8
+func atoi mod=0 extern=1 noalloc=0 ret=i32 params=1 s:mut ref u8
+func clock_gettime mod=0 extern=1 noalloc=0 ret=i32 params=2 clk_id:i32 ts:mut ref TimeSpec
+func backtrace mod=0 extern=1 noalloc=0 ret=i32 params=2 buf:mut ref mut ref u8 size:i32
+func backtrace_symbols_fd mod=0 extern=1 noalloc=0 ret=void params=3 buf:mut ref mut ref u8 size:i32 fd:i32
+func println mod=1 extern=0 noalloc=0 ret=void params=1 s:mut ref u8 body_toks=[268,279)
+func print_u64 mod=1 extern=0 noalloc=0 ret=void params=1 x:u64 body_toks=[292,303)
+func add mod=2 extern=0 noalloc=0 ret=i32 params=2 x:i32 y:i32 body_toks=[348,354)
+func main mod=2 extern=0 noalloc=0 ret=i32 params=0 body_toks=[363,402)

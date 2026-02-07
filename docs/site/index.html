@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aster Docs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="nav">
+        <div class="brand">Aster Docs</div>
+        <div class="hint">
+          Serve this folder from the repo root:
+          <code>python3 -m http.server</code>
+        </div>
+        <div class="group">Learn</div>
+        <a class="item" href="?doc=docs/learn/README.md">Quickstart</a>
+        <a class="item" href="?doc=docs/learn/modules.md">Modules</a>
+        <a class="item" href="?doc=docs/learn/ffi.md">FFI</a>
+        <a class="item" href="?doc=docs/perf.md">Perf Governance</a>
+
+        <div class="group">Spec</div>
+        <a class="item" href="?doc=docs/spec/aster1.md">Aster1 (MVP)</a>
+        <a class="item" href="?doc=docs/spec/abi.md">ABI</a>
+        <a class="item" href="?doc=docs/spec/memory_effects_ffi.md">Memory/Effects</a>
+        <a class="item" href="?doc=docs/spec/packages.md">Packages</a>
+
+        <div class="group">Apps</div>
+        <a class="item" href="?doc=aster/apps/README.md">Sample Apps</a>
+      </aside>
+
+      <main class="main">
+        <div class="toolbar">
+          <div id="docpath" class="path"></div>
+        </div>
+        <pre id="content" class="content"></pre>
+      </main>
+    </div>
+
+    <script>
+      function qs(key) {
+        const u = new URL(window.location.href);
+        return u.searchParams.get(key);
+      }
+
+      async function loadDoc(path) {
+        const pre = document.getElementById("content");
+        const p = document.getElementById("docpath");
+        p.textContent = path || "";
+        if (!path) {
+          pre.textContent =
+            "Select a doc from the left.\n\n" +
+            "This is intentionally minimal: it loads Markdown files and displays them as plain text.\n";
+          return;
+        }
+        try {
+          const r = await fetch("../" + path, { cache: "no-store" });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const txt = await r.text();
+          pre.textContent = txt;
+        } catch (e) {
+          pre.textContent =
+            "Failed to load: " + path + "\n\n" +
+            String(e) + "\n\n" +
+            "Tip: run a local server from the repo root and open:\n" +
+            "  http://localhost:8000/docs/site/\n";
+        }
+      }
+
+      loadDoc(qs("doc"));
+    </script>
+  </body>
+</html>
+
