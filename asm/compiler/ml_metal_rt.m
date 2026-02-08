@@ -11,6 +11,7 @@
 #import <Metal/Metal.h>
 #import <CoreFoundation/CoreFoundation.h>
 
+#include <pthread.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -26,6 +27,7 @@ typedef struct {
 } AsterMetalCtx;
 
 static AsterMetalCtx g_ctx = {0};
+static pthread_mutex_t g_metal_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static const char* kSrc =
     "#include <metal_stdlib>\n"
@@ -73,7 +75,7 @@ static const char* kSrcMatmul =
     "  out[row * N + col] = acc;\n"
     "}\n";
 
-static int aster_metal_init_devq(void) {
+static int aster_metal_init_devq_locked(void) {
   if (g_ctx.inited_devq) return 0;
   @autoreleasepool {
     g_ctx.dev = MTLCreateSystemDefaultDevice();
@@ -85,9 +87,16 @@ static int aster_metal_init_devq(void) {
   }
 }
 
-static int aster_metal_ensure_library(void) {
+static int aster_metal_init_devq(void) {
+  pthread_mutex_lock(&g_metal_lock);
+  int rc = aster_metal_init_devq_locked();
+  pthread_mutex_unlock(&g_metal_lock);
+  return rc;
+}
+
+static int aster_metal_ensure_library_locked(void) {
   if (g_ctx.lib) return 0;
-  if (aster_metal_init_devq() != 0) return 1;
+  if (aster_metal_init_devq_locked() != 0) return 1;
   @autoreleasepool {
     NSError* err = nil;
     // Single compiled library cached for the process lifetime.
@@ -97,10 +106,17 @@ static int aster_metal_ensure_library(void) {
   }
 }
 
-static int aster_metal_ensure_pso(id<MTLComputePipelineState>* out, const char* name_cstr) {
+static int aster_metal_ensure_library(void) {
+  pthread_mutex_lock(&g_metal_lock);
+  int rc = aster_metal_ensure_library_locked();
+  pthread_mutex_unlock(&g_metal_lock);
+  return rc;
+}
+
+static int aster_metal_ensure_pso_locked(id<MTLComputePipelineState>* out, const char* name_cstr) {
   if (!out) return 1;
   if (*out) return 0;
-  if (aster_metal_ensure_library() != 0) return 1;
+  if (aster_metal_ensure_library_locked() != 0) return 1;
   @autoreleasepool {
     NSError* err = nil;
     NSString* name = [NSString stringWithUTF8String:name_cstr];
@@ -117,8 +133,16 @@ static int aster_metal_ensure_pso(id<MTLComputePipelineState>* out, const char* 
   }
 }
 
+static int aster_metal_ensure_pso(id<MTLComputePipelineState>* out, const char* name_cstr) {
+  pthread_mutex_lock(&g_metal_lock);
+  int rc = aster_metal_ensure_pso_locked(out, name_cstr);
+  pthread_mutex_unlock(&g_metal_lock);
+  return rc;
+}
+
 static int dispatch_1d(id<MTLComputePipelineState> pso, id<MTLBuffer> b0, NSUInteger o0, id<MTLBuffer> b1, NSUInteger o1,
                        id<MTLBuffer> b2, NSUInteger o2, uint64_t n, int nargs) {
+  if (n == 0) return 0;
   @autoreleasepool {
     id<MTLCommandBuffer> cb = [g_ctx.q commandBuffer];
     if (!cb) return 1;

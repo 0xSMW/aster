@@ -90,13 +90,13 @@ timing_nl:
 .equ OFF_OUT_FP, 56
 .equ OFF_PID, 64
 .equ OFF_STATUS, 72
-.equ OFF_ARGV_ARR, 80  // 16 pointers = 128 bytes
-.equ OFF_TS, 208       // struct timespec (16 bytes)
-.equ OFF_T0, 224       // u64
-.equ OFF_T1, 232       // u64
-.equ OFF_T2, 240       // u64
-.equ OFF_TIMING, 248   // u64 flag
-.equ FRAME_SIZE, 256
+.equ OFF_ARGV_ARR, 80  // 32 pointers = 256 bytes
+.equ OFF_TS, 336       // struct timespec (16 bytes)
+.equ OFF_T0, 352       // u64
+.equ OFF_T1, 360       // u64
+.equ OFF_T2, 368       // u64
+.equ OFF_TIMING, 376   // u64 flag
+.equ FRAME_SIZE, 384
 
 // int main(int argc, char **argv)
 FUNC_BEGIN main
@@ -694,13 +694,13 @@ FUNC_END asterc__u64_to_dec
 .equ OFF_OUT_FP, 56
 .equ OFF_PID, 64
 .equ OFF_STATUS, 72
-.equ OFF_ARGV_ARR, 80  // 16 pointers = 128 bytes
-.equ OFF_TS, 208       // struct timespec (16 bytes)
-.equ OFF_T0, 224       // u64
-.equ OFF_T1, 232       // u64
-.equ OFF_T2, 240       // u64
-.equ OFF_TIMING, 248   // u64 flag
-.equ FRAME_SIZE, 256
+.equ OFF_ARGV_ARR, 80  // 32 pointers = 256 bytes
+.equ OFF_TS, 336       // struct timespec (16 bytes)
+.equ OFF_T0, 352       // u64
+.equ OFF_T1, 360       // u64
+.equ OFF_T2, 368       // u64
+.equ OFF_TIMING, 376   // u64 flag
+.equ FRAME_SIZE, 384
 
 FUNC_BEGIN main
     FRAME_ENTER FRAME_SIZE

@@ -477,6 +477,11 @@ FUNC_BEGIN aster_lex__next
     cmp x6, x5
     b.hs .Lemit_unknown
     ldrb w7, [x4, x6]
+    // Strings must not span lines.
+    cmp w7, #10
+    b.eq .Lemit_unknown
+    cmp w7, #13
+    b.eq .Lemit_unknown
     cmp w7, #'"'
     b.eq .Lstring_done
     cmp w7, #'\\'
@@ -977,6 +982,27 @@ FUNC_BEGIN aster_lex__next
     b.ne .Lint_loop_dec
 .Lhex_loop_start:
     add x6, x6, #1
+    // Require at least one hex digit after 0x/0X.
+    cmp x6, x5
+    b.hs .Lhex_no_digits
+    ldrb w7, [x4, x6]
+    cmp w7, #'0'
+    b.lo .Lhex_no_digits
+    cmp w7, #'9'
+    b.ls .Lhex_loop
+    cmp w7, #'a'
+    b.lo .Lhex_check_A0
+    cmp w7, #'f'
+    b.ls .Lhex_loop
+.Lhex_check_A0:
+    cmp w7, #'A'
+    b.lo .Lhex_no_digits
+    cmp w7, #'F'
+    b.hi .Lhex_no_digits
+    b .Lhex_loop
+.Lhex_no_digits:
+    sub x6, x6, #1
+    b .Lemit_unknown
 .Lhex_loop:
     cmp x6, x5
     b.hs .Lemit_int
@@ -1572,6 +1598,11 @@ FUNC_BEGIN aster_lex__next
     cmpq %r11, %rdx
     jae .Lemit_unknown_x86
     movzbl (%r10,%rdx,1), %eax
+    # Strings must not span lines.
+    cmpb $10, %al
+    je .Lemit_unknown_x86
+    cmpb $13, %al
+    je .Lemit_unknown_x86
     cmpb $34, %al
     je .Lstring_done_x86
     cmpb $'\\', %al
@@ -2147,6 +2178,27 @@ FUNC_BEGIN aster_lex__next
     jne .Lint_loop_dec_x86
 .Lhex_loop_start_x86:
     addq $1, %rdx
+    # Require at least one hex digit after 0x/0X.
+    cmpq %r11, %rdx
+    jae .Lhex_no_digits_x86
+    movzbl (%r10,%rdx,1), %eax
+    cmpb $'0', %al
+    jb .Lhex_no_digits_x86
+    cmpb $'9', %al
+    jbe .Lhex_loop_x86
+    cmpb $'a', %al
+    jb .Lhex_check_A0_x86
+    cmpb $'f', %al
+    jbe .Lhex_loop_x86
+.Lhex_check_A0_x86:
+    cmpb $'A', %al
+    jb .Lhex_no_digits_x86
+    cmpb $'F', %al
+    ja .Lhex_no_digits_x86
+    jmp .Lhex_loop_x86
+.Lhex_no_digits_x86:
+    subq $1, %rdx
+    jmp .Lemit_unknown_x86
 .Lhex_loop_x86:
     cmpq %r11, %rdx
     jae .Lemit_int_x86

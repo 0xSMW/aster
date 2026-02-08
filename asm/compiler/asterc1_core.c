@@ -4222,6 +4222,20 @@ static char* default_cache_dir(const AsterUnit* u) {
   return path_join3(u->root_abs, ".context/build/cache", "");
 }
 
+static void cache_key_add_file_hash(Sha256* s, const char* label, const char* path) {
+  if (!s || !label || !path || !path[0]) return;
+  sha256_update(s, label, strlen(label));
+  sha256_update(s, path, strlen(path));
+  sha256_update(s, "\n", 1);
+  uint8_t h[32];
+  if (sha256_file(path, h)) {
+    sha256_update(s, h, 32);
+  } else {
+    sha256_update(s, "missing", 7);
+  }
+  sha256_update(s, "\n", 1);
+}
+
 static void unit_cache_key(const AsterUnit* u, uint8_t out_key[32]) {
   // key = sha256( "aster_cache_v1" || unit_sha || self_sha || link flags )
   uint8_t selfh[32] = {0};
@@ -4240,9 +4254,7 @@ static void unit_cache_key(const AsterUnit* u, uint8_t out_key[32]) {
 
   const char* obj = getenv("ASTER_LINK_OBJ");
   if (obj && obj[0] && !(obj[0] == '0' && obj[1] == 0)) {
-    sha256_update(&s, "obj=", 4);
-    sha256_update(&s, obj, strlen(obj));
-    sha256_update(&s, "\n", 1);
+    cache_key_add_file_hash(&s, "obj=", obj);
   }
   if (env_enabled("ASTER_LINK_ACCELERATE")) {
     sha256_update(&s, "accel=1\n", 8);
@@ -4286,11 +4298,13 @@ static void unit_cache_key(const AsterUnit* u, uint8_t out_key[32]) {
 
   if (u->flags & UNIT_FLAG_NET) {
     sha256_update(&s, "net=1\n", 6);
+    if (u->net_obj_abs) cache_key_add_file_hash(&s, "net_obj=", u->net_obj_abs);
   } else {
     sha256_update(&s, "net=0\n", 6);
   }
   if (u->flags & UNIT_FLAG_METAL) {
     sha256_update(&s, "metal=1\n", 8);
+    if (u->metal_obj_abs) cache_key_add_file_hash(&s, "metal_obj=", u->metal_obj_abs);
   } else {
     sha256_update(&s, "metal=0\n", 8);
   }
