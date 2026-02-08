@@ -11,7 +11,7 @@ This document defines the production-grade requirements for the Aster language, 
 
 ## Task Tracker (kept current)
 
-Updated: 2026-02-07
+Updated: 2026-02-08
 Legend: [x] done, [ ] todo, [~] in progress
 
 ### 0) Policy / Hygiene
@@ -168,17 +168,17 @@ Legend: [x] done, [ ] todo, [~] in progress
       Add ML benchmark set(s) (training step time + inference throughput/latency) and track deltas in `BENCH.md`.
 
 ### 8) Algorithmic Conformance Suite (15 LeetCode Hard Problems in Native Aster)
-- [ ] Define the suite contract and wire it into the green gate.
+- [x] Define the suite contract and wire it into the green gate.
       Location: `aster/tests/leetcode/`.
       Harness: extend `aster/tests/run.sh` to compile+run `aster/tests/leetcode/*.as` (expected: compile ok, exit 0).
       Keep all tests deterministic (fixed inputs; no timing; bounded recursion).
-- [ ] Establish test conventions for `.as` algorithm tests:
+- [x] Establish test conventions for `.as` algorithm tests:
       each file contains `main()` that runs multiple cases and returns non-zero on the first failure (optionally prints diagnostics).
       Prefer structural validation (element-by-element equality, invariants) over large golden text outputs.
-- [ ] Implement minimal "test-only stdlib" helpers needed by the suite (non-generic is fine initially):
+- [x] Implement minimal "test-only stdlib" helpers needed by the suite (non-generic is fine initially):
       vec/stack/deque/heap, basic hashing, and string utilities (strlen/compare/copy, char access).
       Short-term: allow per-test duplication; mid-term: factor once module imports exist.
-- [ ] Implement the 15-problem suite (one file per problem), based on `plan/report-2026-02-06-aster-leetcode-hard-suite.md`:
+- [x] Implement the 15-problem suite (one file per problem), based on `plan/report-2026-02-06-aster-leetcode-hard-suite.md`:
       10 Regular Expression Matching
       23 Merge k Sorted Lists
       25 Reverse Nodes in k-Group
@@ -194,7 +194,7 @@ Legend: [x] done, [ ] todo, [~] in progress
       127 Word Ladder
       239 Sliding Window Maximum
       312 Burst Balloons
-- [ ] Add docs: `aster/tests/leetcode/README.md` describing how to run the suite locally and how to add new problems/cases.
+- [x] Add docs: `aster/tests/leetcode/README.md` describing how to run the suite locally and how to add new problems/cases.
 
 Keep this list updated as work progresses.
 

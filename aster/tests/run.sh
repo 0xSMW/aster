@@ -68,4 +68,21 @@ for src in "$ROOT/aster/tests/fail/"*.as; do
   echo "ok fail $base"
 done
 
+for src in "$ROOT/aster/tests/leetcode/"*.as; do
+  [[ -e "$src" ]] || continue
+  base="$(basename "$src" .as)"
+  bin="$OUT/leetcode_$base"
+  if ! compile "$src" "$bin" >"$OUT/leetcode_$base.compile.stdout" 2>"$OUT/leetcode_$base.compile.stderr"; then
+    echo "FAIL leetcode compile $base" >&2
+    status=1
+    continue
+  fi
+  if ! "$bin" >"$OUT/leetcode_$base.run.stdout" 2>"$OUT/leetcode_$base.run.stderr"; then
+    echo "FAIL leetcode run $base" >&2
+    status=1
+    continue
+  fi
+  echo "ok leetcode $base"
+done
+
 exit "$status"
