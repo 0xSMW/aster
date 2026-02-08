@@ -64,10 +64,11 @@ def http_write_u64_dec(tls is ptr of void, x is u64) returns i32
         i = i + 1
     else
         while v != 0 do
-            var d is u64 = v % 10
+            var q is u64 = v / 10
+            var d is u64 = v - (q * 10)
             tmp[i] = 48 + d
             i = i + 1
-            v = v / 10
+            v = q
     # reverse in place
     var a is usize = 0
     var b is usize = i

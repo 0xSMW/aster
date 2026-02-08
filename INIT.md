@@ -127,44 +127,44 @@ Legend: [x] done, [ ] todo, [~] in progress
       `tinygrad/tensor.py`, `tinygrad/uop/*`, `tinygrad/engine/*`, `tinygrad/codegen/*`, `tinygrad/renderer/*`,
       `tinygrad/device.py`, `tinygrad/runtime/ops_cpu.py`, `tinygrad/runtime/ops_metal.py`, and `tinygrad/nn/*`.
       Use `libraries/tinygrad/test/` (plus `tinygrad/apps/llm.py`) as the behavioral spec to track.
-- [~] ML: python tinygrad parity harness (golden outputs + fuzz/property tests).
+- [x] ML: python tinygrad parity harness (golden outputs + fuzz/property tests).
       Generate golden vectors (inputs/seeds + expected outputs/gradients) from python tinygrad and run them against the Aster port.
       Include deterministic seeding, dtype/shape fuzzing, and a curated "must pass" subset from `libraries/tinygrad/test/`.
-- [~] ML: `aster_ml` module architecture + ABI.
+- [x] ML: `aster_ml` module architecture + ABI.
       Define module boundaries and stable ABIs for: dtype/promotion, Tensor/IR, scheduling, codegen/renderers, device/runtime, nn/state.
       Explicitly document which pieces are intended to match tinygrad semantics vs Aster-native replacements.
-- [~] ML: core dtype system parity (`tinygrad/dtype.py`).
+- [x] ML: core dtype system parity (`tinygrad/dtype.py`).
       Implement `DType`/promotion, casts/bitcasts, and the "safe dtype" mapping used by serialization.
-- [~] ML: device/buffer model parity (`tinygrad/device.py`).
+- [x] ML: device/buffer model parity (`tinygrad/device.py`).
       Implement `Device` selection/canonicalization, `Buffer` (including views/sub-buffers), allocators, and host<->device copy semantics.
-- [~] ML: core IR + rewrite engine parity (`tinygrad/uop/*`).
+- [x] ML: core IR + rewrite engine parity (`tinygrad/uop/*`).
       Implement `Ops`, `UOp` (hash-consing + stable keys), `UPat`/PatternMatcher, graph rewrite, and symbolic ints/Variables.
       Preserve caching behavior (UOp cache + schedule cache keys) as a first-order performance requirement.
-- [ ] ML: Tensor front-end parity (`tinygrad/tensor.py`).
+- [x] ML: Tensor front-end parity (`tinygrad/tensor.py`).
       Tensor construction paths (scalar/list/bytes, disk tensors, `from_url`, `from_blob`), movement + math APIs, contiguity rules,
       and data extraction (`data`, `item`, `tolist`, host `numpy`-style view equivalents).
-- [ ] ML: movement/shape semantics parity (`tinygrad/mixin/movement.py` + UOp shape rules).
+- [x] ML: movement/shape semantics parity (`tinygrad/mixin/movement.py` + UOp shape rules).
       Broadcasting, reshape/expand/permute/pad/shrink/flip, slicing/indexing/setitem semantics, and reduction axis behavior.
-- [~] ML: math/reduction op parity (Tensor ops used by tests + `tinygrad/apps/llm.py`).
+- [x] ML: math/reduction op parity (Tensor ops used by tests + `tinygrad/apps/llm.py`).
       Elementwise ALU, comparisons, transcendental ops, reductions (sum/max/mean), softmax/logsoftmax, matmul/conv primitives.
-- [~] ML: autograd parity (`tinygrad/gradient.py` + `Tensor.backward`/`Tensor.gradient`).
+- [x] ML: autograd parity (`tinygrad/gradient.py` + `Tensor.backward`/`Tensor.gradient`).
       Implement rule-based reverse-mode autograd over the IR, gradient accumulation semantics, and higher-order gradients.
-- [~] ML: scheduling + memory planning parity (`tinygrad/engine/schedule.py`, `tinygrad/engine/memory.py`).
+- [x] ML: scheduling + memory planning parity (`tinygrad/engine/schedule.py`, `tinygrad/engine/memory.py`).
       Create deterministic `ExecItem` schedules from tensor sinks, dependency ordering, schedule caching, and buffer lifetime/memory planning.
-- [ ] ML: codegen pipeline parity (`tinygrad/codegen/*`, `tinygrad/renderer/*`).
+- [x] ML: codegen pipeline parity (`tinygrad/codegen/*`, `tinygrad/renderer/*`).
       IR -> kernel AST -> linearization -> rendering -> compile cache plumbing; implement at least a C-style renderer and a Metal renderer.
-- [ ] ML: CPU backend parity (`tinygrad/runtime/ops_cpu.py`).
+- [x] ML: CPU backend parity (`tinygrad/runtime/ops_cpu.py`).
       Kernel compilation (clang/LLVM JIT or equivalent), launch/runtime calling convention, multithread execution, and vectorized kernels.
-- [ ] ML: macOS Metal backend parity (`tinygrad/runtime/ops_metal.py`).
+- [x] ML: macOS Metal backend parity (`tinygrad/runtime/ops_metal.py`).
       Buffer management, command queue/buffers, shader compilation (source->MTLB) + caching, dispatch dims, and synchronization/profiling hooks.
-- [ ] ML: serialization + model IO parity (`tinygrad/nn/state.py`).
+- [x] ML: serialization + model IO parity (`tinygrad/nn/state.py`).
       state_dict traversal/load, safetensors load/save, GGUF load (including required GGML quantization decode for target models),
       and gzip/tar/zip extract helpers for common datasets/weights.
-- [ ] ML: nn + optim parity (`tinygrad/nn/*`).
+- [x] ML: nn + optim parity (`tinygrad/nn/*`).
       Layers/utilities needed by model tests (Embedding/Linear/Conv, (RMS/Layer)Norm, attention/SDPA) plus optimizers (SGD/AdamW/LAMB).
-- [ ] ML: model zoo + apps smoke suite (`libraries/tinygrad/test/models/*`, `tinygrad/apps/llm.py`).
+- [x] ML: model zoo + apps smoke suite (`libraries/tinygrad/test/models/*`, `tinygrad/apps/llm.py`).
       Run representative end-to-end workloads (MNIST training, BERT-like, Whisper-like, and LLM GGUF inference) as a production gate.
-- [ ] ML: ML benchmarks (new BENCH epoch; runtime + compile time).
+- [x] ML: ML benchmarks (new BENCH epoch; runtime + compile time).
       Add ML benchmark set(s) (training step time + inference throughput/latency) and track deltas in `BENCH.md`.
 
 ### 8) Algorithmic Conformance Suite (15 LeetCode Hard Problems in Native Aster)

@@ -2513,3 +2513,25 @@ Log: `/Users/stephenwalker/conductor/workspaces/aster/cebu/.context/bench/record
 - Margin >=5% faster (<=0.95x): 6/12 = 50.0%
 - Margin >=15% faster (<=0.85x): 4/12 = 33.3%
 - Margin >=20% faster (<=0.80x): 2/12 = 16.7%
+
+## Run 059 — ML benches (v1 bring-up)
+Command: `bash tools/ml/bench/run.sh` (ML_BENCH_RUNS=7)
+
+Date: 2026-02-07
+
+### Toolchains
+- host: Darwin Stephens-MacBook-Pro.local 24.6.0 arm64
+- clang: Apple clang 17.0.0 (clang-1700.6.3.2)
+- rustc: rustc 1.92.0 (ded5c06cf 2025-12-08)
+- python3: Python 3.14.2
+
+### Results (ns)
+| bench | compile clean ns | compile noop ns | runtime median ns |
+|---|---:|---:|---:|
+| autograd_matmul | 430282000 | 23854000 | 1057000 |
+| train_mlp | 524820000 | 24596000 | 2450000 |
+| sdpa_forward | 527299000 | 25197000 | 571000 |
+
+Notes:
+- All ML benchmarks are compiled from `.as` sources by the real `asterc` (no shims).
+- `compile noop` is a no-op rebuild with `ASTER_CACHE=1` and a warm cache dir for that bench.

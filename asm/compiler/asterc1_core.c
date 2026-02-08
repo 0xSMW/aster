@@ -3331,10 +3331,12 @@ typedef struct {
   uint32_t flags;    // UNIT_FLAG_*
   uint32_t _pad_flags;
   char* net_obj_abs; // absolute path to net tls helper object (when needed)
+  char* metal_obj_abs; // absolute path to metal helper object (when needed)
 } AsterUnit;
 
 enum {
   UNIT_FLAG_NET = 1u << 0, // unit imports core.net/core.http
+  UNIT_FLAG_METAL = 1u << 1, // unit imports aster_ml.runtime.ops_metal
 };
 
 // sha256 (minimal, portable)
@@ -4027,6 +4029,7 @@ AsterUnit* asterc1__unit_from_entry(const char* in_path, const uint8_t* entry_sr
   Sha256 hu;
   sha256_init(&hu);
   bool needs_net = false;
+  bool needs_metal = false;
 
   for (size_t i = 0; i < g.norder; i++) {
     ModNode* n = g.order[i];
@@ -4039,6 +4042,9 @@ AsterUnit* asterc1__unit_from_entry(const char* in_path, const uint8_t* entry_sr
     // Link helpers based on imported stdlib modules.
     if (strcmp(rel, "src/core/net.as") == 0 || strcmp(rel, "src/core/http.as") == 0) {
       needs_net = true;
+    }
+    if (strcmp(rel, "src/aster_ml/runtime/ops_metal.as") == 0) {
+      needs_metal = true;
     }
 
     bb_append_cstr(&out, "# --- module: ");
@@ -4079,8 +4085,11 @@ AsterUnit* asterc1__unit_from_entry(const char* in_path, const uint8_t* entry_sr
   u->len = out.len ? (out.len - 1) : 0;
   memcpy(u->sha256, unit_hash, 32);
   u->root_abs = root_abs;
-  u->flags = needs_net ? UNIT_FLAG_NET : 0;
+  u->flags = 0;
+  if (needs_net) u->flags |= UNIT_FLAG_NET;
+  if (needs_metal) u->flags |= UNIT_FLAG_METAL;
   u->net_obj_abs = needs_net ? path_join3(root_abs, "tools/build/out/net_tls_rt.o", "") : NULL;
+  u->metal_obj_abs = needs_metal ? path_join3(root_abs, "tools/build/out/ml_metal_rt.o", "") : NULL;
   return u;
 }
 
@@ -4279,6 +4288,11 @@ static void unit_cache_key(const AsterUnit* u, uint8_t out_key[32]) {
     sha256_update(&s, "net=1\n", 6);
   } else {
     sha256_update(&s, "net=0\n", 6);
+  }
+  if (u->flags & UNIT_FLAG_METAL) {
+    sha256_update(&s, "metal=1\n", 8);
+  } else {
+    sha256_update(&s, "metal=0\n", 8);
   }
 
   sha256_final(&s, out_key);

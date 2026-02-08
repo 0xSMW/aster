@@ -71,6 +71,12 @@ bash "$ROOT/asm/tests/run.sh"
 # 2.5) Run Aster-level compiler tests (real asterc).
 bash "$ROOT/aster/tests/run.sh"
 
+# 2.7) ML golden-vector parity (python tinygrad oracle + generated Aster runner).
+# Keep this small and deterministic so it's suitable for the green gate.
+ML_GOLDEN_SEED="${ML_GOLDEN_SEED:-1}" \
+ML_GOLDEN_FUZZ_CASES="${ML_GOLDEN_FUZZ_CASES:-5}" \
+bash "$ROOT/tools/ml/run.sh"
+
 # 2.55) IR conformance (AST/HIR dumps are deterministic).
 bash "$ROOT/aster/tests/ir/run.sh"
 

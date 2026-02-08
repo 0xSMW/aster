@@ -13,10 +13,6 @@ import os
 from typing import Any, Iterable
 
 
-def repo_root() -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-
 def flatten(x: Any) -> list[float]:
     if x is None:
         return []
@@ -31,11 +27,9 @@ def flatten(x: Any) -> list[float]:
 
 
 def f_lit(x: float) -> str:
-    # Aster float literal grammar is simple (no exponent). Our generator values
-    # are small and exactly representable, so repr() is stable and non-exponent.
+    # Aster float literal grammar is simple (no exponent).
     s = repr(float(x))
     if "e" in s or "E" in s:
-        # Fallback: force fixed-point.
         s = f"{x:.12f}".rstrip("0").rstrip(".")
         if "." not in s:
             s += ".0"
@@ -70,8 +64,16 @@ def emit_ptr_checks(
     for i, want in enumerate(want_vals):
         w = f_lit(want)
         emit(lines, f"{indent}if abs_f32({ptr_name}[{i}] - {w}) > {tol_name} then")
-        emit(lines, f"{indent}    printf(\"FAIL {case_name} {label} idx %llu\\n\", {i})")
+        emit(lines, f'{indent}    printf("FAIL {case_name} {label} idx %llu\\n", {i})')
         emit(lines, f"{indent}    return 1")
+
+
+def emit_alloc_dims(lines: list[str], indent: str, name: str, dims: list[int]) -> None:
+    nd = len(dims)
+    emit(lines, f"{indent}var {name} is slice of usize = malloc({nd} * 8)")
+    emit_if_ret1(lines, indent, f"{name} is null")
+    for i, d in enumerate(dims):
+        emit(lines, f"{indent}{name}[{i}] = {d}")
 
 
 def main() -> int:
@@ -104,7 +106,7 @@ def main() -> int:
         name = str(case["name"])
         dtype = str(case.get("dtype", ""))
         if dtype != "float32":
-            raise SystemExit(f"unsupported dtype in v0 parity runner: {dtype} ({name})")
+            raise SystemExit(f"unsupported dtype in v1 parity runner: {dtype} ({name})")
 
         x_shape = [int(v) for v in case.get("x_shape", [])]
         y_shape = [int(v) for v in case.get("y_shape", [])]
@@ -116,7 +118,7 @@ def main() -> int:
 
         emit(out_lines, "")
         emit(out_lines, f"    # case: {name}")
-        emit(out_lines, f"    printf(\"case {name}\\n\")")
+        emit(out_lines, f'    printf("case {name}\\n")')
 
         if name.startswith("add_f32_"):
             r, c = x_shape
@@ -124,36 +126,38 @@ def main() -> int:
             assert len(x_vals) == r * c and len(y_vals) == r * c
             assert len(xg_vals) == r * c and len(yg_vals) == r * c
 
-            emit(out_lines, "    var a is Tensor")
-            emit(out_lines, "    var b is Tensor")
-            emit(out_lines, "    var tmp is Tensor")
-            emit(out_lines, "    var s is Tensor")
-            emit_if_ret1(out_lines, "    ", f"tensor_init_leaf(&a, 2, {r}, {c}, 1, 1) != 0")
-            emit_if_ret1(out_lines, "    ", f"tensor_init_leaf(&b, 2, {r}, {c}, 1, 1) != 0")
+            emit(out_lines, "    var a is GradTensor")
+            emit(out_lines, "    var b is GradTensor")
+            emit(out_lines, "    var tmp is GradTensor")
+            emit(out_lines, "    var s is GradTensor")
+            emit_alloc_dims(out_lines, "    ", "dims", [r, c])
+            emit_if_ret1(out_lines, "    ", "grad_tensor_init_leaf(&a, 2, dims, 1) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_init_leaf(&b, 2, dims, 1) != 0")
+            emit(out_lines, "    free(dims)")
 
-            emit(out_lines, "    var ap is slice of f32 = a.data.data")
+            emit(out_lines, "    var ap is slice of f32 = tensor_data_ptr(&a.data)")
             emit_ptr_fill(out_lines, "    ", "ap", x_vals)
-            emit(out_lines, "    var bp is slice of f32 = b.data.data")
+            emit(out_lines, "    var bp is slice of f32 = tensor_data_ptr(&b.data)")
             emit_ptr_fill(out_lines, "    ", "bp", y_vals)
 
-            emit_if_ret1(out_lines, "    ", "tensor_add(&tmp, &a, &b) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_sum(&s, &tmp) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_backward(&s) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_add(&tmp, &a, &b) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_sum_all(&s, &tmp) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_backward(&s) != 0")
 
-            emit(out_lines, "    var sp is slice of f32 = s.data.data")
+            emit(out_lines, "    var sp is slice of f32 = tensor_data_ptr(&s.data)")
             emit(out_lines, f"    if abs_f32(sp[0] - {f_lit(out_val)}) > tol then")
-            emit(out_lines, "        printf(\"FAIL add out\\n\")")
+            emit(out_lines, '        printf("FAIL add out\\n")')
             emit(out_lines, "        return 1")
 
-            emit(out_lines, "    var gap is slice of f32 = a.grad.data")
+            emit(out_lines, "    var gap is slice of f32 = tensor_data_ptr(&a.grad)")
             emit_ptr_checks(out_lines, "    ", name, "x_grad", "gap", xg_vals, "tol")
-            emit(out_lines, "    var gbp is slice of f32 = b.grad.data")
+            emit(out_lines, "    var gbp is slice of f32 = tensor_data_ptr(&b.grad)")
             emit_ptr_checks(out_lines, "    ", name, "y_grad", "gbp", yg_vals, "tol")
 
-            emit(out_lines, "    tensor_free(&s)")
-            emit(out_lines, "    tensor_free(&tmp)")
-            emit(out_lines, "    tensor_free(&b)")
-            emit(out_lines, "    tensor_free(&a)")
+            emit(out_lines, "    grad_tensor_free(&s)")
+            emit(out_lines, "    grad_tensor_free(&tmp)")
+            emit(out_lines, "    grad_tensor_free(&b)")
+            emit(out_lines, "    grad_tensor_free(&a)")
 
         elif name.startswith("mul_f32_"):
             r, c = x_shape
@@ -161,36 +165,38 @@ def main() -> int:
             assert len(x_vals) == r * c and len(y_vals) == r * c
             assert len(xg_vals) == r * c and len(yg_vals) == r * c
 
-            emit(out_lines, "    var a is Tensor")
-            emit(out_lines, "    var b is Tensor")
-            emit(out_lines, "    var tmp is Tensor")
-            emit(out_lines, "    var s is Tensor")
-            emit_if_ret1(out_lines, "    ", f"tensor_init_leaf(&a, 2, {r}, {c}, 1, 1) != 0")
-            emit_if_ret1(out_lines, "    ", f"tensor_init_leaf(&b, 2, {r}, {c}, 1, 1) != 0")
+            emit(out_lines, "    var a is GradTensor")
+            emit(out_lines, "    var b is GradTensor")
+            emit(out_lines, "    var tmp is GradTensor")
+            emit(out_lines, "    var s is GradTensor")
+            emit_alloc_dims(out_lines, "    ", "dims", [r, c])
+            emit_if_ret1(out_lines, "    ", "grad_tensor_init_leaf(&a, 2, dims, 1) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_init_leaf(&b, 2, dims, 1) != 0")
+            emit(out_lines, "    free(dims)")
 
-            emit(out_lines, "    var ap is slice of f32 = a.data.data")
+            emit(out_lines, "    var ap is slice of f32 = tensor_data_ptr(&a.data)")
             emit_ptr_fill(out_lines, "    ", "ap", x_vals)
-            emit(out_lines, "    var bp is slice of f32 = b.data.data")
+            emit(out_lines, "    var bp is slice of f32 = tensor_data_ptr(&b.data)")
             emit_ptr_fill(out_lines, "    ", "bp", y_vals)
 
-            emit_if_ret1(out_lines, "    ", "tensor_mul(&tmp, &a, &b) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_sum(&s, &tmp) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_backward(&s) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_mul(&tmp, &a, &b) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_sum_all(&s, &tmp) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_backward(&s) != 0")
 
-            emit(out_lines, "    var sp is slice of f32 = s.data.data")
+            emit(out_lines, "    var sp is slice of f32 = tensor_data_ptr(&s.data)")
             emit(out_lines, f"    if abs_f32(sp[0] - {f_lit(out_val)}) > tol then")
-            emit(out_lines, "        printf(\"FAIL mul out\\n\")")
+            emit(out_lines, '        printf("FAIL mul out\\n")')
             emit(out_lines, "        return 1")
 
-            emit(out_lines, "    var gap is slice of f32 = a.grad.data")
+            emit(out_lines, "    var gap is slice of f32 = tensor_data_ptr(&a.grad)")
             emit_ptr_checks(out_lines, "    ", name, "x_grad", "gap", xg_vals, "tol")
-            emit(out_lines, "    var gbp is slice of f32 = b.grad.data")
+            emit(out_lines, "    var gbp is slice of f32 = tensor_data_ptr(&b.grad)")
             emit_ptr_checks(out_lines, "    ", name, "y_grad", "gbp", yg_vals, "tol")
 
-            emit(out_lines, "    tensor_free(&s)")
-            emit(out_lines, "    tensor_free(&tmp)")
-            emit(out_lines, "    tensor_free(&b)")
-            emit(out_lines, "    tensor_free(&a)")
+            emit(out_lines, "    grad_tensor_free(&s)")
+            emit(out_lines, "    grad_tensor_free(&tmp)")
+            emit(out_lines, "    grad_tensor_free(&b)")
+            emit(out_lines, "    grad_tensor_free(&a)")
 
         elif name.startswith("matmul_f32_"):
             m, k = x_shape
@@ -199,36 +205,42 @@ def main() -> int:
             assert len(x_vals) == m * k and len(y_vals) == k * n
             assert len(xg_vals) == m * k and len(yg_vals) == k * n
 
-            emit(out_lines, "    var a is Tensor")
-            emit(out_lines, "    var b is Tensor")
-            emit(out_lines, "    var tmp is Tensor")
-            emit(out_lines, "    var s is Tensor")
-            emit_if_ret1(out_lines, "    ", f"tensor_init_leaf(&a, 2, {m}, {k}, 1, 1) != 0")
-            emit_if_ret1(out_lines, "    ", f"tensor_init_leaf(&b, 2, {k}, {n}, 1, 1) != 0")
+            emit(out_lines, "    var a is GradTensor")
+            emit(out_lines, "    var b is GradTensor")
+            emit(out_lines, "    var tmp is GradTensor")
+            emit(out_lines, "    var s is GradTensor")
 
-            emit(out_lines, "    var ap is slice of f32 = a.data.data")
+            emit_alloc_dims(out_lines, "    ", "dims_a", [m, k])
+            emit_if_ret1(out_lines, "    ", "grad_tensor_init_leaf(&a, 2, dims_a, 1) != 0")
+            emit(out_lines, "    free(dims_a)")
+
+            emit_alloc_dims(out_lines, "    ", "dims_b", [k, n])
+            emit_if_ret1(out_lines, "    ", "grad_tensor_init_leaf(&b, 2, dims_b, 1) != 0")
+            emit(out_lines, "    free(dims_b)")
+
+            emit(out_lines, "    var ap is slice of f32 = tensor_data_ptr(&a.data)")
             emit_ptr_fill(out_lines, "    ", "ap", x_vals)
-            emit(out_lines, "    var bp is slice of f32 = b.data.data")
+            emit(out_lines, "    var bp is slice of f32 = tensor_data_ptr(&b.data)")
             emit_ptr_fill(out_lines, "    ", "bp", y_vals)
 
-            emit_if_ret1(out_lines, "    ", "tensor_matmul(&tmp, &a, &b) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_sum(&s, &tmp) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_backward(&s) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_matmul(&tmp, &a, &b) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_sum_all(&s, &tmp) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_backward(&s) != 0")
 
-            emit(out_lines, "    var sp is slice of f32 = s.data.data")
+            emit(out_lines, "    var sp is slice of f32 = tensor_data_ptr(&s.data)")
             emit(out_lines, f"    if abs_f32(sp[0] - {f_lit(out_val)}) > tol then")
-            emit(out_lines, "        printf(\"FAIL matmul out\\n\")")
+            emit(out_lines, '        printf("FAIL matmul out\\n")')
             emit(out_lines, "        return 1")
 
-            emit(out_lines, "    var gap is slice of f32 = a.grad.data")
+            emit(out_lines, "    var gap is slice of f32 = tensor_data_ptr(&a.grad)")
             emit_ptr_checks(out_lines, "    ", name, "x_grad", "gap", xg_vals, "tol")
-            emit(out_lines, "    var gbp is slice of f32 = b.grad.data")
+            emit(out_lines, "    var gbp is slice of f32 = tensor_data_ptr(&b.grad)")
             emit_ptr_checks(out_lines, "    ", name, "y_grad", "gbp", yg_vals, "tol")
 
-            emit(out_lines, "    tensor_free(&s)")
-            emit(out_lines, "    tensor_free(&tmp)")
-            emit(out_lines, "    tensor_free(&b)")
-            emit(out_lines, "    tensor_free(&a)")
+            emit(out_lines, "    grad_tensor_free(&s)")
+            emit(out_lines, "    grad_tensor_free(&tmp)")
+            emit(out_lines, "    grad_tensor_free(&b)")
+            emit(out_lines, "    grad_tensor_free(&a)")
 
         elif name.startswith("relu_f32_"):
             r, c = x_shape
@@ -236,29 +248,31 @@ def main() -> int:
             assert len(x_vals) == r * c
             assert len(xg_vals) == r * c
 
-            emit(out_lines, "    var a is Tensor")
-            emit(out_lines, "    var tmp is Tensor")
-            emit(out_lines, "    var s is Tensor")
-            emit_if_ret1(out_lines, "    ", f"tensor_init_leaf(&a, 2, {r}, {c}, 1, 1) != 0")
+            emit(out_lines, "    var a is GradTensor")
+            emit(out_lines, "    var tmp is GradTensor")
+            emit(out_lines, "    var s is GradTensor")
+            emit_alloc_dims(out_lines, "    ", "dims", [r, c])
+            emit_if_ret1(out_lines, "    ", "grad_tensor_init_leaf(&a, 2, dims, 1) != 0")
+            emit(out_lines, "    free(dims)")
 
-            emit(out_lines, "    var ap is slice of f32 = a.data.data")
+            emit(out_lines, "    var ap is slice of f32 = tensor_data_ptr(&a.data)")
             emit_ptr_fill(out_lines, "    ", "ap", x_vals)
 
-            emit_if_ret1(out_lines, "    ", "tensor_relu(&tmp, &a) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_sum(&s, &tmp) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_backward(&s) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_relu(&tmp, &a) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_sum_all(&s, &tmp) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_backward(&s) != 0")
 
-            emit(out_lines, "    var sp is slice of f32 = s.data.data")
+            emit(out_lines, "    var sp is slice of f32 = tensor_data_ptr(&s.data)")
             emit(out_lines, f"    if abs_f32(sp[0] - {f_lit(out_val)}) > tol then")
-            emit(out_lines, "        printf(\"FAIL relu out\\n\")")
+            emit(out_lines, '        printf("FAIL relu out\\n")')
             emit(out_lines, "        return 1")
 
-            emit(out_lines, "    var gap is slice of f32 = a.grad.data")
+            emit(out_lines, "    var gap is slice of f32 = tensor_data_ptr(&a.grad)")
             emit_ptr_checks(out_lines, "    ", name, "x_grad", "gap", xg_vals, "tol")
 
-            emit(out_lines, "    tensor_free(&s)")
-            emit(out_lines, "    tensor_free(&tmp)")
-            emit(out_lines, "    tensor_free(&a)")
+            emit(out_lines, "    grad_tensor_free(&s)")
+            emit(out_lines, "    grad_tensor_free(&tmp)")
+            emit(out_lines, "    grad_tensor_free(&a)")
 
         elif name.startswith("permute_f32_"):
             d0, d1, d2 = x_shape
@@ -266,35 +280,49 @@ def main() -> int:
             assert len(x_vals) == d0 * d1 * d2
             assert len(xg_vals) == d0 * d1 * d2
 
-            emit(out_lines, "    var a is Tensor")
-            emit(out_lines, "    var tmp is Tensor")
-            emit(out_lines, "    var s is Tensor")
-            emit_if_ret1(out_lines, "    ", f"tensor_init_leaf(&a, 3, {d0}, {d1}, {d2}, 1) != 0")
+            # Build leaf as 1D, then reshape + permute, to exercise movement autograd.
+            emit(out_lines, "    var raw is GradTensor")
+            emit(out_lines, "    var a is GradTensor")
+            emit(out_lines, "    var tmp is GradTensor")
+            emit(out_lines, "    var s is GradTensor")
 
-            emit(out_lines, "    var ap is slice of f32 = a.data.data")
-            emit_ptr_fill(out_lines, "    ", "ap", x_vals)
+            emit_alloc_dims(out_lines, "    ", "dims1", [d0 * d1 * d2])
+            emit_if_ret1(out_lines, "    ", "grad_tensor_init_leaf(&raw, 1, dims1, 1) != 0")
+            emit(out_lines, "    free(dims1)")
 
-            emit_if_ret1(out_lines, "    ", "tensor_permute_3(&tmp, &a, 2, 0, 1) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_sum(&s, &tmp) != 0")
-            emit_if_ret1(out_lines, "    ", "tensor_backward(&s) != 0")
+            emit(out_lines, "    var rp is slice of f32 = tensor_data_ptr(&raw.data)")
+            emit_ptr_fill(out_lines, "    ", "rp", x_vals)
 
-            emit(out_lines, "    var sp is slice of f32 = s.data.data")
+            emit_alloc_dims(out_lines, "    ", "dims3", [d0, d1, d2])
+            emit_if_ret1(out_lines, "    ", "grad_tensor_reshape(&a, &raw, 3, dims3) != 0")
+            emit(out_lines, "    free(dims3)")
+
+            # tinygrad case uses permute(2,0,1)
+            emit_alloc_dims(out_lines, "    ", "perm", [2, 0, 1])
+            emit_if_ret1(out_lines, "    ", "grad_tensor_permute(&tmp, &a, perm) != 0")
+            emit(out_lines, "    free(perm)")
+
+            emit_if_ret1(out_lines, "    ", "grad_tensor_sum_all(&s, &tmp) != 0")
+            emit_if_ret1(out_lines, "    ", "grad_tensor_backward(&s) != 0")
+
+            emit(out_lines, "    var sp is slice of f32 = tensor_data_ptr(&s.data)")
             emit(out_lines, f"    if abs_f32(sp[0] - {f_lit(out_val)}) > tol then")
-            emit(out_lines, "        printf(\"FAIL permute out\\n\")")
+            emit(out_lines, '        printf("FAIL permute out\\n")')
             emit(out_lines, "        return 1")
 
-            emit(out_lines, "    var gap is slice of f32 = a.grad.data")
+            emit(out_lines, "    var gap is slice of f32 = tensor_data_ptr(&a.grad)")
             emit_ptr_checks(out_lines, "    ", name, "x_grad", "gap", xg_vals, "tol")
 
-            emit(out_lines, "    tensor_free(&s)")
-            emit(out_lines, "    tensor_free(&tmp)")
-            emit(out_lines, "    tensor_free(&a)")
+            emit(out_lines, "    grad_tensor_free(&s)")
+            emit(out_lines, "    grad_tensor_free(&tmp)")
+            emit(out_lines, "    grad_tensor_free(&a)")
+            emit(out_lines, "    grad_tensor_free(&raw)")
 
         else:
             raise SystemExit(f"unknown case name: {name}")
 
     emit(out_lines, "")
-    emit(out_lines, "    printf(\"ok\\n\")")
+    emit(out_lines, '    printf("ok\\n")')
     emit(out_lines, "    return 0")
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
@@ -306,3 +334,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

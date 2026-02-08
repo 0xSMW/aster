@@ -1,4 +1,4 @@
-# Aster ML (tinygrad Port) (WIP)
+# Aster ML (tinygrad Port) (v1)
 
 This folder tracks the post-production ML work: a native Aster port of
 [`tinygrad`](../../libraries/tinygrad/).
@@ -20,6 +20,14 @@ Quickstart:
 bash tools/ml/run.sh
 ```
 
+Bench:
+
+```bash
+# Compile+run ML microbenches (compile clean + compile noop + runtime median).
+bash tools/ml/bench/run.sh
+```
+
 Env knobs:
 - `ML_GOLDEN_SEED=...` (default: 1)
 - `ML_GOLDEN_FUZZ_CASES=...` (default: 5; each adds add/matmul/permute cases)
+- `ML_BENCH_RUNS=...` (default: 7)

@@ -14,6 +14,7 @@ BIN="$OUT_DIR/$BASE_NAME"
 shopt -s nullglob
 RUNTIME_SRC=("$ROOT/asm/runtime/"*.S)
 COMPILER_SRC=("$ROOT/asm/compiler/"*.S "$ROOT/asm/compiler/"*.c)
+COMPILER_SRC+=("$ROOT/asm/compiler/"*.m)
 
 OBJ_FILES=()
 LINK_FILES=()
@@ -23,7 +24,7 @@ for file in "${RUNTIME_SRC[@]}" "${COMPILER_SRC[@]}" "$SRC"; do
     OBJ_FILES+=("$obj")
     # Runtime helper objects (`*_rt.c`) are meant to be linked into produced
     # Aster binaries via `ASTER_LINK_OBJ`, not into the compiler binary itself.
-    if [[ "$file" == "$ROOT/asm/compiler/"*_rt.c ]]; then
+    if [[ "$file" == "$ROOT/asm/compiler/"*_rt.c || "$file" == "$ROOT/asm/compiler/"*_rt.m ]]; then
         continue
     fi
     LINK_FILES+=("$obj")

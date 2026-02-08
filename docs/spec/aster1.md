@@ -4,7 +4,7 @@ This document defines the **bench-complete** Aster surface supported by the
 production `asterc` compiler today (the subset required to compile and run the
 benchmark suite from `.as` source).
 
-Status: 2026-02-06
+Status: 2026-02-07
 
 ## Goals
 
@@ -15,8 +15,8 @@ Status: 2026-02-06
 
 ## Non-Goals (For Aster1)
 
-- Whole-program generics/traits, modules/imports, and a full stdlib.
-- Ownership/borrow checking.
+- Whole-program generics/traits and a full package manager/registry.
+- A full Rust-grade ownership/borrow system (Aster enforces a pragmatic subset).
 - Full struct rvalue semantics (Aster1 represents structs by storage).
 
 ## Lexical Structure
@@ -104,13 +104,15 @@ Pointer-like:
 
 - `var name is Type = expr`
 - `let name is Type = expr`
+- `var name = expr` (type inference from initializer)
+- `let name = expr` (type inference from initializer)
 - Assignment: `lvalue = expr`
 - `if cond then ...` with optional `else` / `else if`
 - `while cond do ...`
 - `break`, `continue`
 - `return` / `return expr`
 
-**Explicit types only:** locals must use `is Type` (no type inference in Aster1).
+Locals may omit `is Type` only when they have an initializer (`= <Expr>`).
 
 ## Expressions
 

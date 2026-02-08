@@ -49,6 +49,8 @@ dash_Wl_framework_accel:
     .asciz "-Wl,-framework,Accelerate"
 dash_Wl_framework_net:
     .asciz "-Wl,-framework,Security,-framework,CoreFoundation"
+dash_Wl_framework_metal:
+    .asciz "-Wl,-framework,Metal,-framework,Foundation"
 env_debug:
     .asciz "ASTER_DEBUG"
 env_olevel:
@@ -418,8 +420,18 @@ FUNC_BEGIN main
     // Auto: link TLS helper when the unit imports core.net/core.http.
     ldr x9, [sp, #OFF_IN_FP]     // AsterUnit*
     ldr w10, [x9, #56]           // u->flags
-    tbz w10, #0, .Lmaybe_accel   // UNIT_FLAG_NET
+    tbz w10, #0, .Lmaybe_metal_obj   // UNIT_FLAG_NET
     ldr x11, [x9, #64]           // u->net_obj_abs
+    cbz x11, .Lmaybe_metal_obj
+    str x11, [x22]
+    add x22, x22, #8
+
+.Lmaybe_metal_obj:
+    // Auto: link Metal helper when the unit imports aster_ml.runtime.ops_metal.
+    ldr x9, [sp, #OFF_IN_FP]     // AsterUnit*
+    ldr w10, [x9, #56]           // u->flags
+    tbz w10, #1, .Lmaybe_accel   // UNIT_FLAG_METAL
+    ldr x11, [x9, #72]           // u->metal_obj_abs
     cbz x11, .Lmaybe_accel
     str x11, [x22]
     add x22, x22, #8
@@ -443,9 +455,19 @@ FUNC_BEGIN main
     // Auto: link Security/CoreFoundation when UNIT_FLAG_NET is set.
     ldr x9, [sp, #OFF_IN_FP]     // AsterUnit*
     ldr w10, [x9, #56]           // u->flags
-    tbz w10, #0, .Largv_done
+    tbz w10, #0, .Lmaybe_metal_fw
     adrp x2, dash_Wl_framework_net@PAGE
     add x2, x2, dash_Wl_framework_net@PAGEOFF
+    str x2, [x22]
+    add x22, x22, #8
+
+.Lmaybe_metal_fw:
+    // Auto: link Metal/Foundation when UNIT_FLAG_METAL is set.
+    ldr x9, [sp, #OFF_IN_FP]     // AsterUnit*
+    ldr w10, [x9, #56]           // u->flags
+    tbz w10, #1, .Largv_done
+    adrp x2, dash_Wl_framework_metal@PAGE
+    add x2, x2, dash_Wl_framework_metal@PAGEOFF
     str x2, [x22]
     add x22, x22, #8
 
@@ -1003,8 +1025,22 @@ FUNC_BEGIN main
     movq OFF_IN_FP(%rsp), %r11 // AsterUnit*
     movl 56(%r11), %ecx        // u->flags
     testl $1, %ecx             // UNIT_FLAG_NET
-    je .Lmaybe_accel_x86
+    je .Lmaybe_metal_obj_x86
     movq 64(%r11), %rax        // u->net_obj_abs
+    testq %rax, %rax
+    je .Lmaybe_metal_obj_x86
+    movq OFF_STATUS(%rsp), %r10
+    movq %rax, 0(%r10)
+    addq $8, %r10
+    movq %r10, OFF_STATUS(%rsp)
+
+.Lmaybe_metal_obj_x86:
+    // Auto: link Metal helper when the unit imports aster_ml.runtime.ops_metal.
+    movq OFF_IN_FP(%rsp), %r11 // AsterUnit*
+    movl 56(%r11), %ecx        // u->flags
+    testl $2, %ecx             // UNIT_FLAG_METAL
+    je .Lmaybe_accel_x86
+    movq 72(%r11), %rax        // u->metal_obj_abs
     testq %rax, %rax
     je .Lmaybe_accel_x86
     movq OFF_STATUS(%rsp), %r10
@@ -1033,8 +1069,20 @@ FUNC_BEGIN main
     movq OFF_IN_FP(%rsp), %r11 // AsterUnit*
     movl 56(%r11), %ecx        // u->flags
     testl $1, %ecx
-    je .Largv_done_x86
+    je .Lmaybe_metal_fw_x86
     leaq dash_Wl_framework_net(%rip), %rax
+    movq OFF_STATUS(%rsp), %r10
+    movq %rax, 0(%r10)
+    addq $8, %r10
+    movq %r10, OFF_STATUS(%rsp)
+
+.Lmaybe_metal_fw_x86:
+    // Auto: link Metal/Foundation when UNIT_FLAG_METAL is set.
+    movq OFF_IN_FP(%rsp), %r11 // AsterUnit*
+    movl 56(%r11), %ecx        // u->flags
+    testl $2, %ecx
+    je .Largv_done_x86
+    leaq dash_Wl_framework_metal(%rip), %rax
     movq OFF_STATUS(%rsp), %r10
     movq %rax, 0(%r10)
     addq $8, %r10

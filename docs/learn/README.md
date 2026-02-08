@@ -30,3 +30,5 @@ tools/asterfmt/asterfmt --check aster/apps/hello/hello.as
 - FFI (C ABI) and common libc calls
 - Effects (`noalloc`) and performance conventions
 
+Contributor docs:
+- `docs/dev/README.md`

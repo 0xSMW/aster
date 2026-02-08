@@ -1,10 +1,10 @@
-# Aster ML Architecture + ABI (v1 Draft)
+# Aster ML Architecture + ABI (v1)
 
 This doc defines the **module boundaries** and **stable ABIs** for `aster_ml`.
 The intent is to port tinygrad semantics where it matters, while keeping the
 implementation Aster-friendly (explicit memory, no hidden allocations).
 
-Status: WIP (2026-02-07)
+Status: v1 complete (2026-02-07)
 
 ## Design Constraints
 
@@ -99,4 +99,3 @@ Allow Aster-native replacements for:
 - internal container implementations (hash tables, vectors)
 - memory allocators/pools (as long as externally-observable semantics match)
 - backend compile caching layout/paths
-

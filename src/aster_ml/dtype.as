@@ -30,6 +30,19 @@ const DT_F64 is i32 = 13
 const DT_INDEX is i32 = 14
 
 
+def str_eq(a is String, b is String) returns i32
+    if a is null or b is null then
+        return 0
+    var pa is String = a
+    var pb is String = b
+    while pa[0] != 0 or pb[0] != 0 do
+        if pa[0] != pb[0] then
+            return 0
+        pa = pa + 1
+        pb = pb + 1
+    return 1
+
+
 def dtype_itemsize(dt is i32) returns usize
     if dt == DT_BOOL then
         return 1
@@ -265,3 +278,90 @@ def dtype_least_upper(a is i32, b is i32) returns i32
 def dtype_promote(a is i32, b is i32) returns i32
     return dtype_least_upper(a, b)
 
+
+# -----------------------------
+# Serialization interop (v1): safetensors dtype strings
+# -----------------------------
+
+def dtype_safetensors_name(dt is i32) returns String
+    # safetensors dtype strings are uppercase (e.g. "F32").
+    if dt == DT_BOOL then
+        return "BOOL"
+    if dt == DT_I8 then
+        return "I8"
+    if dt == DT_U8 then
+        return "U8"
+    if dt == DT_I16 then
+        return "I16"
+    if dt == DT_U16 then
+        return "U16"
+    if dt == DT_I32 then
+        return "I32"
+    if dt == DT_U32 then
+        return "U32"
+    if dt == DT_I64 then
+        return "I64"
+    if dt == DT_U64 then
+        return "U64"
+    if dt == DT_F16 then
+        return "F16"
+    if dt == DT_BF16 then
+        return "BF16"
+    if dt == DT_F32 then
+        return "F32"
+    if dt == DT_F64 then
+        return "F64"
+    if dt == DT_INDEX then
+        # Not a safetensors dtype; pick a safe representation.
+        return "I64"
+    return "INVALID"
+
+
+def dtype_from_safetensors_name(s is String) returns i32
+    if s is null then
+        return DT_INVALID
+    if str_eq(s, "BOOL") != 0 then
+        return DT_BOOL
+    if str_eq(s, "I8") != 0 then
+        return DT_I8
+    if str_eq(s, "U8") != 0 then
+        return DT_U8
+    if str_eq(s, "I16") != 0 then
+        return DT_I16
+    if str_eq(s, "U16") != 0 then
+        return DT_U16
+    if str_eq(s, "I32") != 0 then
+        return DT_I32
+    if str_eq(s, "U32") != 0 then
+        return DT_U32
+    if str_eq(s, "I64") != 0 then
+        return DT_I64
+    if str_eq(s, "U64") != 0 then
+        return DT_U64
+    if str_eq(s, "F16") != 0 then
+        return DT_F16
+    if str_eq(s, "BF16") != 0 then
+        return DT_BF16
+    if str_eq(s, "F32") != 0 then
+        return DT_F32
+    if str_eq(s, "F64") != 0 then
+        return DT_F64
+    return DT_INVALID
+
+
+def dtype_can_cast_lossless(src is i32, dst is i32) returns i32
+    # tinygrad has nuanced rules; v1 starts with a conservative subset:
+    # - identical casts are lossless
+    # - widening int/float are lossless
+    if src == DT_INVALID or dst == DT_INVALID then
+        return 0
+    if src == dst then
+        return 1
+    if dtype_is_int(src) != 0 and dtype_is_int(dst) != 0 then
+        return (dtype_itemsize(src) <= dtype_itemsize(dst))
+    if dtype_is_float(src) != 0 and dtype_is_float(dst) != 0 then
+        return (dtype_itemsize(src) <= dtype_itemsize(dst))
+    # allow int -> float widening as lossless only when float is >= 32 bits.
+    if dtype_is_int(src) != 0 and dtype_is_float(dst) != 0 then
+        return (dtype_itemsize(dst) >= 4)
+    return 0
