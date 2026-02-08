@@ -4,32 +4,22 @@ set -euo pipefail
 ROOT="${1:-}"
 OUT="${2:-}"
 MAX_DEPTH="${3:-6}"
+MAX_LINES="${4:-}"
 
 if [[ -z "$ROOT" || -z "$OUT" ]]; then
-  echo "usage: treewalk_list.sh <root> <out> [max_depth]" >&2
+  echo "usage: treewalk_list.sh <root> <out> [max_depth] [max_lines]" >&2
   exit 2
 fi
 
-python3 - <<'PY' "$ROOT" "$OUT" "$MAX_DEPTH"
-import os
-import sys
+tmp="${OUT}.tmp"
+rm -f "$tmp"
 
-root = os.path.abspath(sys.argv[1])
-out = sys.argv[2]
-max_depth = int(sys.argv[3])
+# Deterministic directory list for repeatability across runs.
+find "$ROOT" -maxdepth "$MAX_DEPTH" -type d -print 2>/dev/null | LC_ALL=C sort >"$tmp" || true
 
-base_depth = root.rstrip(os.sep).count(os.sep)
-
-def onerror(err):
-    # Skip permission errors; keep list generation going.
-    pass
-
-with open(out, "w") as f:
-    for dirpath, dirnames, _ in os.walk(root, topdown=True, onerror=onerror, followlinks=False):
-        depth = dirpath.rstrip(os.sep).count(os.sep) - base_depth
-        f.write(dirpath + "\n")
-        if depth >= max_depth:
-            dirnames[:] = []
-        else:
-            dirnames.sort()
-PY
+if [[ -n "$MAX_LINES" && "$MAX_LINES" -gt 0 ]]; then
+  head -n "$MAX_LINES" "$tmp" >"$OUT"
+  rm -f "$tmp"
+else
+  mv -f "$tmp" "$OUT"
+fi

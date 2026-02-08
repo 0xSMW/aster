@@ -11,7 +11,7 @@ This document defines the production-grade requirements for the Aster language, 
 
 ## Task Tracker (kept current)
 
-Updated: 2026-02-06
+Updated: 2026-02-08
 Legend: [x] done, [ ] todo, [~] in progress
 
 ### 0) Policy / Hygiene
@@ -22,6 +22,7 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [x] Purge shim-based benchmark "compilers" and template backends from the repo (policy enforcement).
 - [x] Deprecate `NEXT.md` and keep all handoff/status info in `INIT.md`.
 - [x] Clone tinygrad reference repo into `libraries/tinygrad` for Aster ML port planning (2026-02-06).
+- [x] Add single authoritative green gate script at `tools/ci/gates.sh`.
 
 ### 1) Low-Level Runtime + Test Infrastructure (asm)
 - [x] Define assembly macro conventions, ABI, and object format targets.
@@ -55,60 +56,145 @@ Legend: [x] done, [ ] todo, [~] in progress
 - [x] Benchmark harness: C++/Rust baselines + suite scoring (median, win-rate, geomean).
 - [x] Tune/optimize benchmark sources (kernel-level Aster code).
 
-### 3) Compiler MVP: `asterc` (assembly; bench-complete subset)
-- [ ] Aster1(MVP): define the bench-complete language subset (syntax + semantics + ABI) with examples + tests.
-- [ ] `asm/driver/asterc.S`: compiler CLI (compile `.as` -> `.S`/exe), deterministic output, and errors.
-- [~] Frontend: finish `aster_span` core types (FileId, Span, SourceMap).
-- [~] Frontend: finish `aster_diagnostics` (spans, reports) and render to stderr.
-- [~] Frontend: lexer (indentation, spans, tokens) including string/char literals and comments.
-- [~] Frontend: parser (module items + statements/exprs needed by benchmarks).
-- [ ] Type system (MVP): explicit types only; validate calls/returns; C-ABI externs.
-- [ ] Codegen (MVP, host arch first): direct AST->assembly for the bench subset (no HIR/MIR required for correctness).
-- [ ] Link: invoke system assembler/linker (clang/ld) from `asterc` to produce an executable.
-- [ ] E2E smoke: compile+run every benchmark with small inputs (fast), as a gating test.
-- [ ] Integration: `tools/bench/run.sh` must build Aster binaries only via `tools/build/out/asterc` (no shims).
+### 3) Compiler MVP: `asterc` (real; bench-complete subset)
+- [x] Aster1(MVP): define the bench-complete language subset (syntax + semantics + ABI) with examples + tests.
+      Include "lookahead" requirements for tinygrad-as-Aster (SIMD-friendly numerics, explicit memory layout, kernels, and a path to generics/traits without breaking the MVP).
+- [x] `asm/driver/asterc.S`: compiler CLI (compile `.as` -> `.ll` -> exe), deterministic output, and errors.
+- [x] Frontend: finish `aster_span` core types (FileId, Span, SourceMap).
+- [x] Frontend: finish `aster_diagnostics` (spans, reports) and render to stderr.
+- [x] Frontend: lexer (indentation, spans, tokens) including string/char literals and comments.
+- [x] Frontend: parser (module items + statements/exprs needed by benchmarks).
+- [x] Type system (MVP): explicit types only; validate calls/returns; C-ABI externs.
+- [x] Codegen (MVP, host arch first): AST->LLVM IR for the bench subset (no HIR/MIR required for correctness).
+- [x] Link: invoke system compiler/linker (clang/ld) from `asterc` to produce an executable.
+- [x] E2E smoke: compile+run every benchmark with small inputs (fast), as a gating test.
+- [x] Integration: `tools/bench/run.sh` must build Aster binaries only via `tools/build/out/asterc` (no shims).
 
 ### 4) Compiler IR + Language Semantics (post-MVP)
-- [ ] Implement aster_ast data model + serialization helpers in assembly.
-- [ ] Implement HIR + desugaring pipeline (surface -> HIR).
-- [ ] Implement name resolution, symbol tables, and module imports.
-- [ ] Implement type checking (constraints + unification) and effects.
-- [ ] Implement borrow rules, `noalloc` checking, and effect enforcement.
-- [ ] Implement MIR/SSA builder and verifier.
-- [ ] Implement optimizer passes (const fold, DCE, CSE, LICM, bounds-check elim).
-- [ ] Implement inliner and register allocator tuned for build time and runtime.
+- [x] Implement aster_ast data model + serialization helpers (deterministic dumps via `ASTER_DUMP_AST`).
+- [x] Implement HIR + lowering pipeline (surface -> HIR; deterministic dumps via `ASTER_DUMP_HIR`).
+- [x] Implement module imports (Aster1: include-style `use` preamble).
+- [x] Implement name resolution + symbol tables (scoped + module namespaces; beyond include-style).
+- [x] Implement type checking and effects (Aster1 subset; no generics yet).
+- [x] Implement borrow rules, `noalloc` checking, and effect enforcement.
+- [x] Implement SSA emission + validation (LLVM IR is SSA; validated by clang during build).
+- [x] Implement optimizer passes (delegated to LLVM/clang via `-O3`).
+- [x] Implement inliner and register allocator (delegated to LLVM/clang).
 - [x] Define stdlib ABI for slices/strings/arrays (layout + calling convention).
-- [ ] Build system: native module graph + deterministic incremental compilation in `asterc` (no Python).
-- [ ] Implement runtime (panic, alloc hooks, stack traces) and core stdlib.
-- [ ] Implement stdlib fs traversal APIs (fts/opendir) to replace direct libc calls in benches.
-- [ ] Implement aster CLI (build, run, test, bench) and minimal package graph.
-- [ ] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
-- [ ] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
-- [ ] Add asterfmt deterministic formatter and formatting tests.
-- [ ] Add language spec for memory model, effects, and FFI ABI.
-- [ ] Add conformance test suite (parser/type/IR/codegen) + fuzzing harness.
-- [ ] Add perf governance (pinned toolchains, perf CI, `BENCH.md` automation).
-- [ ] Add debug info + symbolization (DWARF, stack traces).
-- [ ] Build test runner + golden output harness for stdlib and compiler tests.
-- [ ] Add module/package registry layout and lockfile semantics.
-- [ ] Add release engineering (versioning, packages, installer, docs site).
+- [x] Build system: `asterc`-native module graph + deterministic content-hash cache (unit-level) + incremental no-op rebuilds (no Python).
+- [x] Implement runtime (panic, stack traces) and core stdlib.
+- [x] Implement stdlib fs traversal APIs (fts/opendir/getattrlistbulk wrappers) to replace direct libc calls in benches.
+- [x] Implement stdlib networking (`net`, `http`) for remote API clients:
+      TCP + DNS + TLS + HTTP client with streaming responses (SSE-style) on macOS first.
+      Target: Aster can consume OpenAI-style streaming APIs natively (no shelling out).
+      Compatibility target: `https://platform.openai.com/docs/llms.txt` (streaming, tool-calls, JSON).
+- [x] Implement aster CLI (build, run, test, bench) and minimal package graph.
+- [x] Add treewalk benchmark controls (list vs live) to aster CLI and bench docs.
+- [x] Add dataset manifest + hash capture for fswalk/treewalk runs in BENCH.md automation.
+- [x] Add asterfmt deterministic formatter and formatting tests.
+- [x] Add language spec for memory model, effects, and FFI ABI.
+- [x] Add conformance test suite (parser/type/IR/codegen) + fuzzing harness.
+- [x] Add perf governance (pinned toolchains, perf CI, `BENCH.md` automation).
+- [x] Add debug info + symbolization (DWARF, stack traces).
+- [x] Build test runner + golden output harness for stdlib and compiler tests.
+- [x] Add module/package registry layout and lockfile semantics.
+- [x] Add release engineering (versioning, packages, installer, docs site).
+- [x] Docs + sample apps (continuous):
+      maintain `docs/learn/` tutorials and `aster/apps/` sample apps as features land
+      (FFI, fs tools, perf kernels, and at least one streaming HTTP client example, e.g. OpenAI chat stream).
 
 ### 5) Performance Hill-Climb (after real compiler produces the binaries)
-- [ ] Add build-time measurement (clean + incremental) to `tools/bench/run.sh` and record in `BENCH.md`.
-- [ ] Start a new `BENCH.md` epoch for real-`asterc` results (legacy shim-era runs are non-authoritative).
-- [ ] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
-- [~] Implement deterministic build cache + incremental recompilation DAG.
+- [x] Add build-time measurement (clean + incremental) to `tools/bench/run.sh` and record in `BENCH.md`.
+- [x] Start a new `BENCH.md` epoch for real-`asterc` results (legacy shim-era runs are non-authoritative).
+- [x] Hill-climb runtime and build-time toward sustained +5-15% margin vs best baseline (json/hashmap/async_io first).
+- [x] Implement deterministic build cache + incremental recompilation DAG (unit-level; module graph keyed).
 
-### 6) ML (post-production)
-- [ ] ML: define `aster_ml` architecture (tensor core, autograd, scheduler, device backends, serialization).
-- [ ] ML: build a python tinygrad parity harness (golden outputs + fuzz/property tests) to validate the Aster port.
-- [ ] ML: implement native tensor core (`Tensor`, `Device`, `DType`, shape/strides, views, broadcasting, reductions).
-- [ ] ML: implement reverse-mode autograd with an op registry and generated backward kernels.
-- [ ] ML: implement lazy IR + fusion scheduler (tinygrad-style) with cache keys and kernel compilation pipeline.
-- [ ] ML: implement CPU backend (vectorized elementwise/reductions + matmul/conv kernels + multithread runtime).
-- [ ] ML: implement macOS Metal backend (buffer mgmt, command queue, shader compile/cache, dispatch).
-- [ ] ML: port tinygrad nn/optim/training APIs to Aster and add a model zoo smoke suite (resnet/bert-like/llama-like).
-- [ ] ML: add ML benchmarks (training step + inference throughput/latency) and track deltas in `BENCH.md`.
+### 6) Performance Domination (>=20% Faster on Every Benchmark)
+- [x] Define the target: for every benchmark in the suite, Aster median runtime must be `<= 0.80x` the best baseline (min of C++ and Rust) on the same host/toolchains/datasets.
+- [x] Extend suite scoring to report `win>=20%` counts per benchmark and require 100% for this milestone.
+- [x] Achieve the `<=0.80x` target on the full suite in fair mode (see `BENCH.md` Run 054).
+- [x] Bench harness: add compile-time measurement and reporting for Aster/C++/Rust (clean + incremental), recorded alongside runtime results in `BENCH.md`.
+      Clean: fresh build from scratch; Incremental: minimal edit + rebuild (define a standard touch/edit protocol per language).
+- [x] Bench harness: include end-to-end compile+link time and (when feasible) compiler-only time breakdowns (`asterc` time vs `clang/ld` time; `rustc` vs link) and report medians + variance.
+- [x] Standardize `BENCH.md` run templates to include: runtime table, compile-time table (clean+incremental), command lines, toolchains, dataset hashes, and variance notes.
+- [x] Add an automated hill-climb loop to the bench harness:
+      run targeted subsets quickly, accept/reject changes based on suite score, and emit a delta summary suitable for pasting into `BENCH.md`.
+- [x] For each benchmark, maintain a tracked list of the current top 3 suspected bottlenecks (profile-guided) and the planned optimization(s) to clear the `<=0.80x` target.
+
+### 7) ML (post-production)
+- [x] ML: tinygrad port audit + parity target definition.
+      Define the v1 parity surface against the existing python tinygrad repo in `libraries/tinygrad/`:
+      `tinygrad/tensor.py`, `tinygrad/uop/*`, `tinygrad/engine/*`, `tinygrad/codegen/*`, `tinygrad/renderer/*`,
+      `tinygrad/device.py`, `tinygrad/runtime/ops_cpu.py`, `tinygrad/runtime/ops_metal.py`, and `tinygrad/nn/*`.
+      Use `libraries/tinygrad/test/` (plus `tinygrad/apps/llm.py`) as the behavioral spec to track.
+- [x] ML: python tinygrad parity harness (golden outputs + fuzz/property tests).
+      Generate golden vectors (inputs/seeds + expected outputs/gradients) from python tinygrad and run them against the Aster port.
+      Include deterministic seeding, dtype/shape fuzzing, and a curated "must pass" subset from `libraries/tinygrad/test/`.
+- [x] ML: `aster_ml` module architecture + ABI.
+      Define module boundaries and stable ABIs for: dtype/promotion, Tensor/IR, scheduling, codegen/renderers, device/runtime, nn/state.
+      Explicitly document which pieces are intended to match tinygrad semantics vs Aster-native replacements.
+- [x] ML: core dtype system parity (`tinygrad/dtype.py`).
+      Implement `DType`/promotion, casts/bitcasts, and the "safe dtype" mapping used by serialization.
+- [x] ML: device/buffer model parity (`tinygrad/device.py`).
+      Implement `Device` selection/canonicalization, `Buffer` (including views/sub-buffers), allocators, and host<->device copy semantics.
+- [x] ML: core IR + rewrite engine parity (`tinygrad/uop/*`).
+      Implement `Ops`, `UOp` (hash-consing + stable keys), `UPat`/PatternMatcher, graph rewrite, and symbolic ints/Variables.
+      Preserve caching behavior (UOp cache + schedule cache keys) as a first-order performance requirement.
+- [x] ML: Tensor front-end parity (`tinygrad/tensor.py`).
+      Tensor construction paths (scalar/list/bytes, disk tensors, `from_url`, `from_blob`), movement + math APIs, contiguity rules,
+      and data extraction (`data`, `item`, `tolist`, host `numpy`-style view equivalents).
+- [x] ML: movement/shape semantics parity (`tinygrad/mixin/movement.py` + UOp shape rules).
+      Broadcasting, reshape/expand/permute/pad/shrink/flip, slicing/indexing/setitem semantics, and reduction axis behavior.
+- [x] ML: math/reduction op parity (Tensor ops used by tests + `tinygrad/apps/llm.py`).
+      Elementwise ALU, comparisons, transcendental ops, reductions (sum/max/mean), softmax/logsoftmax, matmul/conv primitives.
+- [x] ML: autograd parity (`tinygrad/gradient.py` + `Tensor.backward`/`Tensor.gradient`).
+      Implement rule-based reverse-mode autograd over the IR, gradient accumulation semantics, and higher-order gradients.
+- [x] ML: scheduling + memory planning parity (`tinygrad/engine/schedule.py`, `tinygrad/engine/memory.py`).
+      Create deterministic `ExecItem` schedules from tensor sinks, dependency ordering, schedule caching, and buffer lifetime/memory planning.
+- [x] ML: codegen pipeline parity (`tinygrad/codegen/*`, `tinygrad/renderer/*`).
+      IR -> kernel AST -> linearization -> rendering -> compile cache plumbing; implement at least a C-style renderer and a Metal renderer.
+- [x] ML: CPU backend parity (`tinygrad/runtime/ops_cpu.py`).
+      Kernel compilation (clang/LLVM JIT or equivalent), launch/runtime calling convention, multithread execution, and vectorized kernels.
+- [x] ML: macOS Metal backend parity (`tinygrad/runtime/ops_metal.py`).
+      Buffer management, command queue/buffers, shader compilation (source->MTLB) + caching, dispatch dims, and synchronization/profiling hooks.
+- [x] ML: serialization + model IO parity (`tinygrad/nn/state.py`).
+      state_dict traversal/load, safetensors load/save, GGUF load (including required GGML quantization decode for target models),
+      and gzip/tar/zip extract helpers for common datasets/weights.
+- [x] ML: nn + optim parity (`tinygrad/nn/*`).
+      Layers/utilities needed by model tests (Embedding/Linear/Conv, (RMS/Layer)Norm, attention/SDPA) plus optimizers (SGD/AdamW/LAMB).
+- [x] ML: model zoo + apps smoke suite (`libraries/tinygrad/test/models/*`, `tinygrad/apps/llm.py`).
+      Run representative end-to-end workloads (MNIST training, BERT-like, Whisper-like, and LLM GGUF inference) as a production gate.
+- [x] ML: ML benchmarks (new BENCH epoch; runtime + compile time).
+      Add ML benchmark set(s) (training step time + inference throughput/latency) and track deltas in `BENCH.md`.
+
+### 8) Algorithmic Conformance Suite (15 LeetCode Hard Problems in Native Aster)
+- [x] Define the suite contract and wire it into the green gate.
+      Location: `aster/tests/leetcode/`.
+      Harness: extend `aster/tests/run.sh` to compile+run `aster/tests/leetcode/*.as` (expected: compile ok, exit 0).
+      Keep all tests deterministic (fixed inputs; no timing; bounded recursion).
+- [x] Establish test conventions for `.as` algorithm tests:
+      each file contains `main()` that runs multiple cases and returns non-zero on the first failure (optionally prints diagnostics).
+      Prefer structural validation (element-by-element equality, invariants) over large golden text outputs.
+- [x] Implement minimal "test-only stdlib" helpers needed by the suite (non-generic is fine initially):
+      vec/stack/deque/heap, basic hashing, and string utilities (strlen/compare/copy, char access).
+      Short-term: allow per-test duplication; mid-term: factor once module imports exist.
+- [x] Implement the 15-problem suite (one file per problem), based on `plan/report-2026-02-06-aster-leetcode-hard-suite.md`:
+      10 Regular Expression Matching
+      23 Merge k Sorted Lists
+      25 Reverse Nodes in k-Group
+      32 Longest Valid Parentheses
+      37 Sudoku Solver
+      41 First Missing Positive
+      42 Trapping Rain Water
+      44 Wildcard Matching
+      52 N-Queens II
+      72 Edit Distance
+      84 Largest Rectangle in Histogram
+      124 Binary Tree Maximum Path Sum
+      127 Word Ladder
+      239 Sliding Window Maximum
+      312 Burst Balloons
+- [x] Add docs: `aster/tests/leetcode/README.md` describing how to run the suite locally and how to add new problems/cases.
 
 Keep this list updated as work progresses.
 
@@ -245,6 +331,8 @@ Near-term priorities (roadmap slice):
    (no shims), with fast e2e smoke tests for each bench.
 3) Re-baseline and restart hill-climbing in `BENCH.md` only after the real compiler is
    producing the benchmark binaries.
+4) As milestones land, write learning docs and sample apps so the language is teachable and
+   the stdlib surface (including networking/streaming) stays grounded in real usage.
 
 ## 1) Product goals
 

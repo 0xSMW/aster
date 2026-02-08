@@ -1,15 +1,19 @@
 # Aster
 
-A statically typed, ahead-of-time compiled, native-code programming language with Python/Ruby-like ergonomics and C++/Rust-class performance. Aster began as a single prompt and represents 50+ iterations with gpt-5.2/3-codex. This project exists as an experiment and analysis of novel computer science capabilities in Codex models. 
+A statically typed, ahead-of-time compiled, native-code programming language with high readability and predictable performance.
+
+This repo ships:
+
+- A real compiler: `tools/build/out/asterc` compiles `.as` source to a native executable by emitting LLVM IR and invoking `clang`.
+- A single authoritative gate: `bash tools/ci/gates.sh` (compiler build, asm tests, Aster tests, ML parity, and the benchmark suite).
+- A benchmark harness with C++/Rust baselines: `bash tools/bench/run.sh` (history + provenance in `BENCH.md`).
 
 ```aster
-def dot(a is slice of f64, b is slice of f64, n is usize) returns f64
-    var sum is f64 = 0.0
-    var i is usize = 0
-    while i < n do
-        sum = sum + a[i] * b[i]
-        i = i + 1
-    return sum
+use core.io
+
+def main() returns i32
+    println("hello from aster")
+    return 0
 ```
 
 ## Why Aster?
@@ -17,145 +21,59 @@ def dot(a is slice of f64, b is slice of f64, n is usize) returns f64
 Aster targets the gap between languages that are pleasant to write and languages that run fast. The design principles are:
 
 - **Predictable performance** — typed hot loops compile to tight machine code with no hidden dynamic dispatch or GC barriers.
-- **Fast compilation** — incremental builds in dev mode; optimized binaries in release mode.
+- **Fast compilation** — content-hash build cache and incremental no-op rebuilds.
 - **Allocation transparency** — inner-loop allocations can be forbidden and audited via `noalloc`, enforced transitively by the compiler.
 - **C interop** — first-class C ABI interoperability with `extern` declarations.
-- **Benchmark-driven evolution** — every optimization must improve a benchmark-based objective function.
+- **Benchmark-driven evolution** — performance changes are measured against C++ and Rust baselines.
 
 ## Performance
 
 Benchmark history is tracked in [`BENCH.md`](BENCH.md).
 
-Note: legacy runs in `BENCH.md` were produced before the repo enforced the
-"no compiler shims" policy (compile Aster source with the real `asterc`, no
-transpilers/templates). They are useful as historical exploration but are not
-authoritative. Once the real `asterc` exists and compiles `.as` source into the
-benchmark binaries, we will restart benchmarking and hill-climb toward the
-updated goalpost (+5-15% faster than best-of C++/Rust).
+Note: `BENCH.md` includes a "real `asterc`" epoch where all benchmarks are
+compiled from `.as` source by `tools/build/out/asterc` (no shims/templates).
 
-## Language Overview
+## Docs
 
-### Syntax at a glance
+- Learning Aster: `docs/learn/README.md`
+- Developer docs (compiler/runtime/bench): `docs/dev/README.md`
+- ML (tinygrad-inspired): `docs/ml/README.md`
+- Aster1 subset (authoritative): `docs/spec/aster1.md`
 
-Aster uses indentation-based blocks, keyword-driven type annotations, and explicit control flow:
+## Language Overview (Aster1 Subset)
 
-```aster
-class Counter
-    var value is i64
-
-    def init(start is i64) returns Self
-        let self is Self = alloc Counter
-        self.value = start
-        return self
-
-    def inc(self is ref Self) returns i64
-        self.value = self.value + 1
-        return self.value
-
-trait Printable
-    def print(self is ref Self) returns Result of ()
-
-impl Printable for Counter
-    def print(self is ref Self) returns Result of ()
-        io.print("count=", self.value)
-        return Ok(())
-```
-
-### Generics and traits
+Aster uses indentation-based blocks, explicit control flow, and a C-friendly ABI.
 
 ```aster
-trait Ord of T
-    def lt(a is T, b is T) returns bool
+extern def malloc(n is usize) returns MutString
+extern def free(p is MutString) returns ()
 
-def max of T where T is Ord (a is T, b is T) returns T
-    if Ord.lt(a, b) then
-        return b
-    return a
+def main() returns i32
+    var p is MutString = malloc(16)
+    if p is null then
+        return 1
+    free(p)
+    return 0
 ```
 
-### Data-oriented / numerical (`noalloc`)
+Notes:
+- `use foo.bar` imports a module (one file = one module).
+- `slice of T` is currently a pointer-like type (no embedded length).
+- `noalloc` is a transitive effect that forbids allocation inside hot loops.
 
-```aster
-noalloc def matmul(
-    a is slice of f64,
-    b is slice of f64,
-    out is mut ref slice of f64,
-    n is usize,
-) returns ()
-    var i is usize = 0
-    while i < n do
-        var j is usize = 0
-        while j < n do
-            var sum is f64 = 0.0
-            var k is usize = 0
-            while k < n do
-                sum = sum + a[i * n + k] * b[k * n + j]
-                k = k + 1
-            out[i * n + j] = sum
-            j = j + 1
-        i = i + 1
-```
-
-### Async
-
-```aster
-async def fetch_all(urls is slice of String) returns Array of Result of (String, Error)
-    let tasks is Array of Task of Result of (String, Error) = Array.new()
-    for each url in urls do
-        tasks.push(task.spawn(http.get, url))
-    return await task.join_all(tasks)
-```
-
-### FFI
-
-```aster
-extern def memcpy(dst is ptr of u8, src is ptr of u8, n is usize) returns ptr of u8
-
-unsafe def fill(buf is ptr of u8, n is usize, value is u8) returns ()
-    var i is usize = 0
-    while i < n do
-        *(buf + i) = value
-        i = i + 1
-```
-
-### Key conventions
-
-| Rule | Convention |
-|------|-----------|
-| Indentation | 4 spaces (tabs are illegal) |
-| Naming | `snake_case` functions/variables, `CamelCase` types, `SCREAMING_SNAKE` constants |
-| Type annotations | `var x is i64 = 42` |
-| Return types | `def foo() returns i64` |
-| Type constructors | `Array of T`, `slice of T`, `ptr of T` |
-| Block delimiters | `then` / `do` (blocks end by dedent) |
-| Default int/float | `i64` / `f64` (overridable with suffixes: `42u32`, `3.0f32`) |
-| Error handling | `Result` and `try` (no implicit exceptions) |
-| Memory | Value types on stack; heap requires `class` or explicit `alloc` |
-| Borrowing | Explicit `ref` / `mut ref`; moves by default for non-Copy types |
-| Modules | One file = one module; `use foo.bar` (no star imports) |
+For the authoritative, bench-complete subset, see `docs/spec/aster1.md`.
 
 ## Project Structure
 
 ```
-aster/
-├── asm/
-│   ├── macros/          # Macro-assembly utilities (arena, vec, string, hash)
-│   ├── compiler/        # Lexer, parser, AST, HIR, MIR, codegen (in assembly)
-│   ├── runtime/         # Panic, alloc hooks, stack traces
-│   ├── driver/          # aster CLI and build graph
-│   └── tests/           # Assembly unit tests
-├── aster/
-│   ├── stdlib/          # Aster standard library
-│   ├── tests/           # Language-level tests
-│   └── bench/           # Benchmark kernels (dot, gemm, sort, json, ...)
-├── tools/
-│   ├── build/           # Build scripts (asm build helper + asterc wrapper)
-│   └── bench/           # Benchmark harness and baseline runners
-├── docs/
-│   └── spec/            # Language, ABI, and IR documentation
-├── INIT.md              # Production spec and task tracker
-├── BENCH.md             # Benchmark history and deltas
-└── NEXT.md              # Deprecated; see INIT.md
+asm/           # compiler/runtime (asm + C/ObjC helpers) + asm unit tests
+aster/         # apps, Aster tests, benchmark sources, fixtures
+docs/          # language/perf/ML docs
+libraries/     # reference code (python tinygrad oracle)
+src/           # stdlib + `aster_ml` modules
+tools/         # build, CI gate, bench harness, ML harnesses
+INIT.md        # authoritative spec + milestone tracker
+BENCH.md       # benchmark history (incl. "real asterc" epoch)
 ```
 
 ## Getting Started
@@ -163,9 +81,49 @@ aster/
 ### Prerequisites
 
 - macOS (arm64 or x86_64) or Linux (x86_64)
-- Python 3 (benchmark harness reporting only; not part of the compiler toolchain)
+- Python 3 (ML oracle + reporting only; not part of the compiler/toolchain)
 - Clang (Apple Clang 17+ or LLVM Clang)
 - Rust toolchain (for baseline benchmarks only)
+
+### Quickstart (Single Gate)
+
+```bash
+bash tools/ci/gates.sh
+```
+
+### Build The Compiler
+
+```bash
+bash tools/build/build.sh asm/driver/asterc.S   # -> tools/build/out/asterc
+```
+
+### Compile And Run A Program
+
+```bash
+tools/build/asterc.sh aster/apps/hello/hello.as /tmp/hello
+/tmp/hello
+```
+
+### Project CLI (`tools/aster/aster`)
+
+```bash
+# Build/run with the content-hash cache enabled:
+ASTER_CACHE=1 tools/aster/aster run aster/apps/hello/hello.as
+
+# Run the Aster test suite:
+ASTER_CACHE=1 tools/aster/aster test
+
+# Run the benchmark suite:
+ASTER_CACHE=1 tools/aster/aster bench
+```
+
+### Tests (Direct)
+
+```bash
+bash asm/tests/run.sh
+bash aster/tests/run.sh
+bash aster/tests/ir/run.sh
+```
 
 ### Running Benchmarks
 
@@ -196,65 +154,35 @@ tools/bench/run.sh
 
 Results are written to `$BENCH_OUT_DIR` (default: `.context/bench/out`).
 
-### Compiling Aster Source
+### ML (tinygrad-Inspired, v1)
 
-Benchmarks and programs must be compiled from `.as` source by the real Aster
-compiler (`asterc`), implemented in assembly (work in progress; see `INIT.md`).
+ML lives under `src/aster_ml/` with correctness guarded by pass tests and a
+deterministic golden-vector harness.
 
 ```bash
-# Build the compiler (once `asm/driver/asterc.S` exists)
-tools/build/build.sh asm/driver/asterc.S   # -> tools/build/out/asterc
+# Generate golden vectors using python tinygrad and run the generated Aster runner.
+bash tools/ml/run.sh
 
-# Compile a program
-tools/build/asterc.sh aster/bench/dot/dot.as /tmp/aster_dot
-
-# Build an assembly test
-tools/build/build.sh asm/tests/hello.S
+# Compile+run ML microbenches (compile clean + compile noop + runtime median).
+bash tools/ml/bench/run.sh
 ```
 
-Environment variables for the compiler:
+See `docs/ml/README.md` for details.
+
+### Compiler Environment Variables
+
+The compiler supports cache and link toggles (the gate uses these for coverage):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ASTER_COMPILER` | `tools/build/out/asterc` | Path to the `asterc` binary |
+| `ASTER_CACHE` | unset | Enable content-hash build cache when set to `1` |
+| `ASTER_CACHE_DIR` | `.context/build/cache` | Cache root (when `ASTER_CACHE=1`) |
 
-## Architecture
+## Status
 
-### Compiler Pipeline
-
-The production compiler (in progress) follows this pipeline, implemented in assembly:
-
-```
-Source → Lexer (indentation-aware) → Tokens
-     → Parser → CST
-     → AST build + desugar
-     → Name resolution → HIR with DefIds
-     → Type checking + effect checking
-     → MIR/SSA build + verifier
-     → Optimizer passes (const fold, DCE, CSE, LICM, bounds-check elim)
-     → Codegen to assembly
-     → Assemble + link → binary
-```
-
-All stages share an arena allocator with stable IDs. No stage allocates inside hot loops unless explicitly annotated.
-
-### Bootstrapping Path
-
-| Stage | Description |
-|-------|-------------|
-| **Stage 0** (done) | Macro-assembly library, test runner, build scripts |
-| **Stage 1** (current) | Aster compiler MVP (bench-complete subset) in assembly |
-| **Stage 2** | HIR, MIR, basic optimizations (const fold, DCE) |
-| **Stage 3** | Borrow checking, escape analysis, `noalloc` enforcement |
-| **Stage 4** | Performance convergence (LICM, CSE, vectorization, incremental compilation) |
-| **Stage 5** | Self-hosting: compile the compiler with itself |
-
-### Implementation
-
-The compiler and runtime are written in assembly (arm64 + x86_64) with a macro-assembly layer for readability. Core runtime primitives (arena allocator, strings, vectors, hash maps) are implemented in `asm/runtime/` and `asm/macros/`.
-
-The benchmark harness is implemented in bash (with Python used only for reporting),
-and will build Aster binaries via the real `asterc` compiler once it exists.
+The authoritative project tracker is `INIT.md`. The authoritative performance
+log is `BENCH.md`. The single CI gate is `tools/ci/gates.sh`.
 
 ## Benchmark Suite
 
@@ -265,24 +193,6 @@ The benchmark suite is the primary objective function for development. All optim
 **Filesystem benchmarks:** list/replay traversal (`fswalk`), live traversal with `getattrlistbulk` (`treewalk`), count-only traversal (`dircount`), inventory with hashing (`fsinventory`).
 
 Scoring: `baseline = min(C++, Rust)` under pinned toolchains. Headline = geometric mean of `Aster / baseline` across all benchmarks.
-
-## Status
-
-Aster is in **active early development**. The benchmark harness is functional, but
-benchmark results are considered non-authoritative until the real `asterc` compiler
-is compiling `.as` source into the benchmark binaries (no shims).
-
-What works today:
-- Full benchmark harness with C++/Rust baselines + fixed datasets
-- Assembly runtime primitives (arena, vec, string, hash)
-- Lexer and parser stubs in assembly (arm64 + x86_64)
-
-What's in progress:
-- `asm/driver/asterc` CLI + end-to-end compile pipeline (parse/typecheck/codegen) for the benchmark subset
-- Full language frontend (AST/HIR/MIR), type system, borrow checker, and optimizations
-- Self-hosting path (compile the compiler with itself)
-
-See [`INIT.md`](INIT.md) for the full production spec, task tracker, and current status/handoff (and `BENCH.md` for benchmark history). `NEXT.md` is deprecated.
 
 ## License
 

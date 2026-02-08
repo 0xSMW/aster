@@ -15,4 +15,7 @@ if [[ ! -x "$ASTER_COMPILER" ]]; then
     exit 2
 fi
 
-"$ASTER_COMPILER" "$1" "$2"
+IN="$1"
+OUT="$2"
+
+"$ASTER_COMPILER" "$IN" "$OUT"

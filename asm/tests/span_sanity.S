@@ -1,9 +1,11 @@
 #include "base.inc"
+#if defined(__aarch64__)
 #include "abi_arm64.inc"
+#elif defined(__x86_64__)
+#include "abi_x86_64.inc"
+#endif
 #include "span.inc"
 #include "vec.inc"
-
-#if defined(__aarch64__)
 
 .equ OFF_SM, 0
 .equ OFF_LINE, 32
@@ -17,6 +19,8 @@ path_str:
 .p2align 2
 src_str:
     .asciz "a\nbc\n"
+
+#if defined(__aarch64__)
 
 FUNC_BEGIN main
     FRAME_ENTER FRAME_SIZE
@@ -58,6 +62,51 @@ FUNC_BEGIN main
     mov w0, #1
 
 .Ldone:
+    FRAME_LEAVE FRAME_SIZE
+FUNC_END main
+
+#elif defined(__x86_64__)
+
+FUNC_BEGIN main
+    FRAME_ENTER FRAME_SIZE
+
+    leaq OFF_SM(%rsp), %rdi
+    callq _aster_span__sourcemap_init
+    testq %rax, %rax
+    jne .Lfail_x86
+
+    leaq OFF_SM(%rsp), %rdi
+    leaq path_str(%rip), %rsi
+    movq $7, %rdx
+    leaq src_str(%rip), %rcx
+    movq $5, %r8
+    callq _aster_span__sourcemap_add
+    cmpq $0, %rax
+    jne .Lfail_x86
+
+    leaq OFF_SM(%rsp), %rdi
+    movq $0, %rsi
+    movq $2, %rdx
+    leaq OFF_LINE(%rsp), %rcx
+    leaq OFF_COL(%rsp), %r8
+    callq _aster_span__sourcemap_line_col
+    testq %rax, %rax
+    jne .Lfail_x86
+
+    movq OFF_LINE(%rsp), %r9
+    movq OFF_COL(%rsp), %r10
+    cmpq $2, %r9
+    jne .Lfail_x86
+    cmpq $1, %r10
+    jne .Lfail_x86
+
+    movl $0, %eax
+    jmp .Ldone_x86
+
+.Lfail_x86:
+    movl $1, %eax
+
+.Ldone_x86:
     FRAME_LEAVE FRAME_SIZE
 FUNC_END main
 

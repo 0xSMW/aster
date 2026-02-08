@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+usage() {
+  cat >&2 <<'TXT'
+usage: tools/aster/aster <cmd> [args...]
+
+cmd:
+  build <path.as|project_dir> [out]
+  run   <path.as|project_dir> [-- args...]
+  test
+  bench [bench_args...]
+  dep   <subcmd> [args...]
+
+dep subcmd:
+  add <name> <path>     add/update `dep <name> <path>` in aster.lock (v1)
+  rm  <name>            remove dep from aster.lock
+  ls                    list deps from aster.lock
+
+env:
+  ASTER_COMPILER      path to tools/build/out/asterc (default: repo)
+  ASTER_CACHE=1       enable content-hash build cache for `build`/`run`
+  ASTER_CACHE_DIR     cache root (default: .context/aster/cache)
+TXT
+}
+
+find_root() {
+  local d="${1:-$PWD}"
+  d="$(cd "$d" && pwd -P)"
+  while true; do
+    if [[ -f "$d/aster.toml" ]]; then
+      printf '%s\n' "$d"
+      return 0
+    fi
+    if [[ "$d" == "/" ]]; then
+      break
+    fi
+    d="$(cd "$d/.." && pwd -P)"
+  done
+  return 1
+}
+
+write_lockfile_v1() {
+  local lock="$1"
+  local deps_list="$2" # may not exist
+  {
+    echo "# aster.lock (v1)"
+    echo "#"
+    echo "# Lockfile format is intentionally minimal for now. It exists so we can:"
+    echo "# - define deterministic dependency resolution once we introduce package deps"
+    echo "# - keep builds reproducible across machines/CI"
+    echo "#"
+    echo "lock_version = 1"
+    echo ""
+    echo "# deps (sorted by name):"
+    if [[ -f "$deps_list" ]]; then
+      # deps_list: name<TAB>path
+      awk -F'\t' 'NF>=2 {printf "dep %s %s\n", $1, $2}' "$deps_list"
+    fi
+  } >"$lock"
+}
+
+dep_add() {
+  local name="$1"
+  local path="$2"
+
+  if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "aster dep add: invalid dep name: $name" >&2
+    exit 2
+  fi
+
+  local root
+  root="$(find_root "$PWD")" || { echo "aster dep add: could not find aster.toml in parent dirs" >&2; exit 2; }
+  local lock="$root/aster.lock"
+
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/aster-lock.XXXXXX")"
+  # shellcheck disable=SC2064
+  trap "rm -f \"$tmp\" \"$tmp.deps\" \"$tmp.deps2\"" EXIT
+
+  # Parse existing deps into name<TAB>path list.
+  if [[ -f "$lock" ]]; then
+    awk '
+      $1=="dep" && NF>=3 {
+        name=$2
+        $1=""; $2=""
+        sub(/^[ \t]+/, "", $0)
+        print name "\t" $0
+      }
+    ' "$lock" >"$tmp.deps" || true
+  else
+    : >"$tmp.deps"
+  fi
+
+  # Update/insert dep.
+  awk -F'\t' -v name="$name" -v path="$path" '
+    BEGIN { updated=0 }
+    {
+      if ($1==name) { print name "\t" path; updated=1; next }
+      print
+    }
+    END {
+      if (!updated) print name "\t" path
+    }
+  ' "$tmp.deps" | LC_ALL=C sort -t $'\t' -k1,1 >"$tmp.deps2"
+
+  write_lockfile_v1 "$tmp" "$tmp.deps2"
+  mv -f "$tmp" "$lock"
+  trap - EXIT
+}
+
+dep_rm() {
+  local name="$1"
+  if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "aster dep rm: invalid dep name: $name" >&2
+    exit 2
+  fi
+
+  local root
+  root="$(find_root "$PWD")" || { echo "aster dep rm: could not find aster.toml in parent dirs" >&2; exit 2; }
+  local lock="$root/aster.lock"
+  if [[ ! -f "$lock" ]]; then
+    echo "aster dep rm: missing lockfile: $lock" >&2
+    exit 2
+  fi
+
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/aster-lock.XXXXXX")"
+  # shellcheck disable=SC2064
+  trap "rm -f \"$tmp\" \"$tmp.deps\" \"$tmp.deps2\"" EXIT
+
+  awk '
+    $1=="dep" && NF>=3 {
+      name=$2
+      $1=""; $2=""
+      sub(/^[ \t]+/, "", $0)
+      print name "\t" $0
+    }
+  ' "$lock" >"$tmp.deps" || true
+
+  awk -F'\t' -v name="$name" '$1!=name {print}' "$tmp.deps" | LC_ALL=C sort -t $'\t' -k1,1 >"$tmp.deps2"
+
+  write_lockfile_v1 "$tmp" "$tmp.deps2"
+  mv -f "$tmp" "$lock"
+  trap - EXIT
+}
+
+dep_ls() {
+  local root
+  root="$(find_root "$PWD")" || { echo "aster dep ls: could not find aster.toml in parent dirs" >&2; exit 2; }
+  local lock="$root/aster.lock"
+  if [[ ! -f "$lock" ]]; then
+    exit 0
+  fi
+  awk '$1=="dep" && NF>=3 {print $2, $3}' "$lock" || true
+}
+
+resolve_entry() {
+  local path="$1"
+  if [[ -d "$path" ]]; then
+    if [[ -f "$path/src/main.as" ]]; then
+      printf '%s\n' "$path/src/main.as"
+      return 0
+    fi
+    echo "aster: missing src/main.as in project dir: $path" >&2
+    exit 2
+  fi
+  printf '%s\n' "$path"
+}
+
+do_build() {
+  local path="$1"
+  local out="${2:-}"
+
+  local entry
+  entry="$(resolve_entry "$path")"
+  if [[ ! -f "$entry" ]]; then
+    echo "aster: entry not found: $entry" >&2
+    exit 2
+  fi
+
+  local out_bin
+  if [[ -n "$out" ]]; then
+    out_bin="$out"
+  else
+    base="$(basename "$entry" .as)"
+    out_bin="$ROOT/.context/aster/build/out/$base"
+  fi
+
+  local cache_root="${ASTER_CACHE_DIR:-$ROOT/.context/aster/cache}"
+  local asterc="${ASTER_COMPILER:-$ROOT/tools/build/out/asterc}"
+  if [[ ! -x "$asterc" ]]; then
+    bash "$ROOT/tools/build/build.sh" "$ROOT/asm/driver/asterc.S" >/dev/null
+  fi
+
+  mkdir -p "$cache_root"
+  mkdir -p "$(dirname "$out_bin")"
+  if [[ -n "${ASTER_CACHE:-}" && "${ASTER_CACHE}" != "0" ]]; then
+    ASTER_COMPILER="$asterc" ASTER_CACHE=1 ASTER_CACHE_DIR="$cache_root" "$ROOT/tools/build/asterc.sh" "$entry" "$out_bin"
+  else
+    ASTER_COMPILER="$asterc" "$ROOT/tools/build/asterc.sh" "$entry" "$out_bin"
+  fi
+  echo "built $out_bin"
+}
+
+do_run() {
+  local path="$1"
+  shift
+  local out="$ROOT/.context/aster/run/bin"
+  do_build "$path" "$out"
+  exec "$out" "$@"
+}
+
+cmd="${1:-}"
+if [[ -z "$cmd" ]]; then
+  usage
+  exit 2
+fi
+shift || true
+
+case "$cmd" in
+  build)
+    if [[ $# -lt 1 || $# -gt 2 ]]; then usage; exit 2; fi
+    do_build "$@"
+    ;;
+  run)
+    if [[ $# -lt 1 ]]; then usage; exit 2; fi
+    path="$1"; shift
+    if [[ "${1:-}" == "--" ]]; then shift; fi
+    do_run "$path" "$@"
+    ;;
+  test)
+    bash "$ROOT/aster/tests/run.sh"
+    ;;
+  bench)
+    # Convenience flags (translate to env vars consumed by tools/bench/run.sh).
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --kernels)
+          export BENCH_SET=kernels
+          shift
+          ;;
+        --fswalk)
+          export BENCH_SET=fswalk
+          shift
+          ;;
+        --all)
+          export BENCH_SET=all
+          shift
+          ;;
+        --fs-root)
+          export FS_BENCH_ROOT="${2:?missing arg to --fs-root}"
+          shift 2
+          ;;
+        --max-depth)
+          export FS_BENCH_MAX_DEPTH="${2:?missing arg to --max-depth}"
+          shift 2
+          ;;
+        --list-fixed)
+          export FS_BENCH_LIST_FIXED=1
+          export FS_BENCH_TREEWALK_LIST_FIXED=1
+          export FS_BENCH_STRICT=1
+          shift
+          ;;
+        --treewalk-mode)
+          export FS_BENCH_TREEWALK_MODE="${2:?missing arg to --treewalk-mode}"
+          shift 2
+          ;;
+        --cpp-mode)
+          export FS_BENCH_CPP_MODE="${2:?missing arg to --cpp-mode}"
+          shift 2
+          ;;
+        --build-timing)
+          export BENCH_BUILD_TIMING=1
+          shift
+          ;;
+        --)
+          shift
+          break
+          ;;
+        *)
+          break
+          ;;
+      esac
+    done
+    bash "$ROOT/tools/bench/run.sh"
+    ;;
+  dep)
+    sub="${1:-}"
+    shift || true
+    case "$sub" in
+      add)
+        if [[ $# -ne 2 ]]; then usage; exit 2; fi
+        dep_add "$1" "$2"
+        ;;
+      rm)
+        if [[ $# -ne 1 ]]; then usage; exit 2; fi
+        dep_rm "$1"
+        ;;
+      ls|list)
+        dep_ls
+        ;;
+      -h|--help|help|"")
+        usage
+        ;;
+      *)
+        echo "aster: unknown dep subcmd: $sub" >&2
+        usage
+        exit 2
+        ;;
+    esac
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    echo "aster: unknown cmd: $cmd" >&2
+    usage
+    exit 2
+    ;;
+esac

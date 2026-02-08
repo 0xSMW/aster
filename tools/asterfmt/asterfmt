@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'TXT'
+usage: tools/asterfmt/asterfmt [--check] <file.as>...
+
+Deterministic, semantics-preserving whitespace normalizer for Aster source:
+- normalize CRLF to LF
+- replace tabs with 4 spaces
+- strip trailing whitespace
+- ensure newline at EOF
+
+Exit status:
+  0: success (and, with --check, no changes needed)
+  1: --check found formatting differences
+  2: usage / error
+TXT
+}
+
+check=0
+if [[ "${1:-}" == "--check" ]]; then
+  check=1
+  shift
+fi
+
+if [[ $# -lt 1 ]]; then
+  usage
+  exit 2
+fi
+
+status=0
+for f in "$@"; do
+  if [[ ! -f "$f" ]]; then
+    echo "asterfmt: not a file: $f" >&2
+    status=2
+    continue
+  fi
+
+  tmp="$(mktemp "${TMPDIR:-/tmp}/asterfmt.XXXXXX")"
+  # shellcheck disable=SC2064
+  trap "rm -f \"$tmp\"" EXIT
+
+  # Slurp-mode so we can normalize end-of-file newline deterministically.
+  perl -0777 -pe 's/\r\n/\n/g; s/\t/    /g; s/[ \t]+$//mg; $_ .= "\n" unless /\n\z/;' "$f" >"$tmp"
+
+  if ! cmp -s "$f" "$tmp"; then
+    if [[ "$check" -eq 1 ]]; then
+      echo "asterfmt: needs format: $f" >&2
+      status=1
+    else
+      mv -f "$tmp" "$f"
+      echo "asterfmt: formatted: $f"
+    fi
+  fi
+
+  rm -f "$tmp"
+  trap - EXIT
+done
+
+exit "$status"

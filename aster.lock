@@ -1,0 +1,8 @@
+# aster.lock (v1)
+#
+# Lockfile format is intentionally minimal for now. It exists so we can:
+# - define deterministic dependency resolution once we introduce package deps
+# - keep builds reproducible across machines/CI
+#
+# Current state: no external deps.
+lock_version = 1
